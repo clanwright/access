@@ -1,0 +1,58 @@
+name: Release gate
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify annotated tag provenance
+        run: |
+          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
+          git fetch --no-tags origin main
+          release_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          git merge-base --is-ancestor "$release_commit" origin/main
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - name: Check formatting
+        run: |
+          git ls-files -z '*.nix' | xargs -0 nix develop --command nixfmt --check
+          nix develop --command prettier --check "**/*.{md,json,json5,yml,yaml}"
+      - name: Run static checks
+        run: |
+          git diff --check
+          nix develop --command actionlint
+          nix develop --command renovate-config-validator renovate.json5
+      - name: Scan for leaked secrets
+        run: nix develop --command gitleaks dir . --no-banner --redact
+      - name: Check all flake outputs
+        run: nix flake check --all-systems --no-write-lock-file
+      - name: Build authoritative packages
+        run: >-
+          nix build --no-write-lock-file
+          .#packages.x86_64-linux.tailscale
+          .#packages.x86_64-linux.fail2ban
+          .#packages.x86_64-linux.fwknop
+      - name: Generate freshness metadata
+        run: nix run .#freshness-report -- --output access-freshness.json
+      - name: Upload release freshness metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: access-freshness
+          path: access-freshness.json
+          if-no-files-found: error
+          retention-days: 30
