@@ -29,7 +29,8 @@ let
       ];
     }
   );
-  marker = moduleFor (defaults // { bootstrapMarkerPath = "/run/access-bootstrap"; });
+  markerPath = "/run/access bootstrap's";
+  marker = moduleFor (defaults // { bootstrapMarkerPath = markerPath; });
   unwrap = value: if builtins.isAttrs value && value ? content then unwrap value.content else value;
   consumerPackageChoice =
     (lib.evalModules {
@@ -64,7 +65,7 @@ let
     && ignoredNetworks.services.fail2ban.jails.sshd.settings.ignoreip == "100.64.0.0/10 10.0.0.0/8"
     &&
       marker.services.fail2ban.jails.sshd.settings.ignorecommand
-      == "/run/current-system/sw/bin/bash -lc 'test -e /run/access-bootstrap'"
+      == "${lib.getExe pkgs.bash} -c ${lib.escapeShellArg ''test -e "$1"''} -- ${lib.escapeShellArg markerPath}"
     && !(marker ? systemd)
     && unwrap enabled.services.fail2ban.package == self.packages.${system}.fail2ban
     && consumerPackageChoice == self.packages.${system}.fail2ban

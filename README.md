@@ -10,10 +10,11 @@ atomic release:
 | `@clanwright/fail2ban-ssh`          | `ssh-guard`    | Fail2ban        |
 | `@clanwright/fwknop-ssh-breakglass` | `breakglass`   | fwknop          |
 
-The flake supports `x86_64-linux`. A consumer adds Access once, then selects
-each module independently with `module.input = "access"`. Access owns the exact
-application closures; the consumer owns machines, placement, secret values,
-firewall policy, operations, and deployment.
+The runtime flake outputs support `x86_64-linux`; formatting and verification
+tooling is also available on `aarch64-darwin`. A consumer adds Access once, then
+selects each module independently with `module.input = "access"`. Access owns
+the exact application closures; the consumer owns machines, placement, secret
+values, firewall policy, operations, and deployment.
 
 The first planned release is `v0.1.0`. Until it is published, this repository
 is development state and must not be used as a moving deployment input.

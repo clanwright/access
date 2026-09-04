@@ -76,7 +76,7 @@ let
     && enabled.users.groups ? sshd
     && enabled.security.pam.services.sshd.startSession
     && enabled.security.pam.services.sshd.showMotd
-    && !enabled.security.pam.services.sshd.unixAuth
+    && !(enabled.security.pam.services.sshd ? unixAuth)
     && sshdUnit.wantedBy == [ "multi-user.target" ]
     &&
       sshdUnit.after == [

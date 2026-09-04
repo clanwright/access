@@ -151,7 +151,6 @@
             security.pam.services.sshd = {
               startSession = true;
               showMotd = true;
-              unixAuth = false;
             };
 
             sops.secrets."${settings.keySecretName}" = {

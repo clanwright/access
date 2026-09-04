@@ -89,7 +89,7 @@
                       # When bootstrap marker exists, ignorecommand exits 0 for any source
                       # and fail2ban skips banning; once marker is removed the jail returns
                       # to normal behavior without config changes.
-                      ignorecommand = "/run/current-system/sw/bin/bash -lc 'test -e ${markerPath}'";
+                      ignorecommand = "${lib.getExe pkgs.bash} -c ${lib.escapeShellArg ''test -e "$1"''} -- ${lib.escapeShellArg markerPath}";
                     }
                 );
               };
