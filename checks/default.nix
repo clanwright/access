@@ -71,4 +71,19 @@
     inherit pkgs root self;
     lib = inputs.nixpkgs.lib;
   };
+  freshness-contract = import ./freshness-contract.nix {
+    inherit
+      pkgs
+      root
+      self
+      system
+      ;
+    lib = inputs.nixpkgs.lib;
+  };
+  renovate-contract = import ./renovate-contract.nix {
+    inherit pkgs root;
+  };
+  release-contract = import ./release-contract.nix {
+    inherit pkgs root;
+  };
 }

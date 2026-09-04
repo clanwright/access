@@ -1,0 +1,22 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  timezone: "Europe/Moscow",
+  schedule: ["before 6am on monday"],
+  dependencyDashboard: true,
+  branchPrefix: "deps/",
+  labels: ["dependencies"],
+  automerge: false,
+  enabledManagers: ["nix"],
+  ignoreDeps: ["flake-parts"],
+  packageRules: [
+    {
+      description: "Update the complete Access closure as one reviewed candidate",
+      matchManagers: ["nix"],
+      matchDepNames: ["nixpkgs", "clan-core"],
+      groupName: "access-closure",
+      schedule: ["before 6am on monday"],
+      automerge: false,
+    },
+  ],
+}

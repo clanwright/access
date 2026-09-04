@@ -27,13 +27,25 @@
 
         perSystem =
           {
+            lib,
             pkgs,
             system,
             ...
           }:
+          let
+            freshnessReport = import ./packages/freshness-report.nix {
+              inherit pkgs;
+              versions = {
+                tailscale = pkgs.tailscale.version;
+                fail2ban = pkgs.fail2ban.version;
+                fwknop = pkgs.fwknop.version;
+              };
+            };
+          in
           {
             packages = {
               inherit (pkgs) tailscale fail2ban fwknop;
+              freshness-report = freshnessReport;
             };
             checks = import ./checks {
               inherit
@@ -45,6 +57,15 @@
               root = ./.;
             };
             formatter = pkgs.nixfmt;
+            devShells.default = pkgs.mkShell {
+              packages = [
+                pkgs.actionlint
+                pkgs.gitleaks
+                pkgs.nixfmt
+                pkgs.prettier
+                pkgs.renovate
+              ];
+            };
           };
       }
     );

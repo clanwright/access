@@ -1,0 +1,20 @@
+{
+  "observedAt": "2026-09-04T00:00:00Z",
+  "packages": {
+    "tailscale": {
+      "actual": "1.102.3",
+      "latestObserved": "1.102.3",
+      "state": "current"
+    },
+    "fail2ban": {
+      "actual": "1.1.1",
+      "latestObserved": "1.1.1",
+      "state": "current"
+    },
+    "fwknop": {
+      "actual": "2.6.11",
+      "latestObserved": "2.6.11",
+      "state": "current"
+    }
+  }
+}
