@@ -34,4 +34,13 @@
       ;
     lib = inputs.nixpkgs.lib;
   };
+  fwknop-ssh-breakglass-contract = import ./fwknop-ssh-breakglass.nix {
+    inherit
+      inputs
+      pkgs
+      self
+      system
+      ;
+    lib = inputs.nixpkgs.lib;
+  };
 }
