@@ -65,7 +65,7 @@ let
     &&
       marker.services.fail2ban.jails.sshd.settings.ignorecommand
       == "/run/current-system/sw/bin/bash -lc 'test -e /run/access-bootstrap'"
-    && marker.systemd.services.fail2ban.unitConfig.ConditionPathExists == "!/run/access-bootstrap"
+    && !(marker ? systemd)
     && unwrap enabled.services.fail2ban.package == self.packages.${system}.fail2ban
     && consumerPackageChoice == self.packages.${system}.fail2ban
     && !(enabled ? sops)

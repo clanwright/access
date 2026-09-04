@@ -139,6 +139,21 @@
             '';
           in
           {
+            services.openssh.generateHostKeys = true;
+
+            users.users.sshd = {
+              isSystemUser = true;
+              group = "sshd";
+              description = "SSH privilege separation user";
+            };
+            users.groups.sshd = { };
+
+            security.pam.services.sshd = {
+              startSession = true;
+              showMotd = true;
+              unixAuth = false;
+            };
+
             sops.secrets."${settings.keySecretName}" = {
               owner = "root";
               group = "root";
@@ -166,7 +181,11 @@
               ${breakglassSshdServiceName} = {
                 description = "WAN SSH daemon for fwknop break-glass access";
                 wantedBy = [ "multi-user.target" ];
-                after = [ "network.target" ];
+                after = [
+                  "network.target"
+                  "sshd-keygen.service"
+                ];
+                wants = [ "sshd-keygen.service" ];
 
                 serviceConfig = {
                   Type = "simple";

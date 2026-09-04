@@ -18,8 +18,9 @@ consumer-owned.
 | `bootstrapMarkerPath` | `null`    |
 
 `lifecycle = "disabled-retained"` contributes no Fail2ban configuration. An
-optional bootstrap marker temporarily suppresses the SSH jail and adds a
-matching systemd start condition until the marker is removed.
+optional bootstrap marker keeps Fail2ban running but makes the SSH jail ignore
+all sources while the marker exists. Protection resumes as soon as the marker
+is removed, without restarting the service.
 
 ## State, secrets, and network boundary
 

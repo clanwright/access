@@ -94,14 +94,6 @@
                 );
               };
             }
-            // (
-              if markerPath == null then
-                { }
-              else
-                {
-                  systemd.services.fail2ban.unitConfig.ConditionPathExists = "!${markerPath}";
-                }
-            )
           else
             { };
       };

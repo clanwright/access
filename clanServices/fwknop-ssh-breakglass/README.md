@@ -2,8 +2,10 @@
 
 Provides a reusable `breakglass` role for hidden WAN SSH access through
 fwknop Single Packet Authorization. Access selects the exact fwknop executable;
-the consumer supplies OpenSSH, iptables, core utilities, placement, secrets,
-and firewall policy.
+the consumer supplies OpenSSH, iptables and core utility packages plus
+placement, secrets, and firewall policy. The role provisions the native
+OpenSSH host-key, privilege-separation user, and PAM prerequisites needed by
+its standalone daemon.
 
 ## Settings and defaults
 

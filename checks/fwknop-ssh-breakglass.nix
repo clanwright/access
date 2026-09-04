@@ -70,8 +70,20 @@ let
         "fwknop-ssh-breakglass"
         "fwknop-ssh-breakglass-sshd"
       ]
+    && enabled.services.openssh.generateHostKeys
+    && enabled.users.users.sshd.isSystemUser
+    && enabled.users.users.sshd.group == "sshd"
+    && enabled.users.groups ? sshd
+    && enabled.security.pam.services.sshd.startSession
+    && enabled.security.pam.services.sshd.showMotd
+    && !enabled.security.pam.services.sshd.unixAuth
     && sshdUnit.wantedBy == [ "multi-user.target" ]
-    && sshdUnit.after == [ "network.target" ]
+    &&
+      sshdUnit.after == [
+        "network.target"
+        "sshd-keygen.service"
+      ]
+    && sshdUnit.wants == [ "sshd-keygen.service" ]
     && sshdUnit.serviceConfig.RuntimeDirectory == "fwknop-ssh-breakglass-sshd"
     && sshdUnit.serviceConfig.RuntimeDirectoryMode == "0700"
     && sshdUnit.serviceConfig.Restart == "on-failure"
