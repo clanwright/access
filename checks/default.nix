@@ -16,4 +16,13 @@
       system
       ;
   };
+  tailscale-admin-contract = import ./tailscale-admin.nix {
+    inherit
+      inputs
+      pkgs
+      self
+      system
+      ;
+    lib = inputs.nixpkgs.lib;
+  };
 }
