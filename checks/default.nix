@@ -25,4 +25,13 @@
       ;
     lib = inputs.nixpkgs.lib;
   };
+  fail2ban-ssh-contract = import ./fail2ban-ssh.nix {
+    inherit
+      inputs
+      pkgs
+      self
+      system
+      ;
+    lib = inputs.nixpkgs.lib;
+  };
 }
