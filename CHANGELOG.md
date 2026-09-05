@@ -5,6 +5,23 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+### Changed
+
+- Separate the breakglass interface, NixOS runtime, and configuration rendering
+  without changing the public module IDs or runtime defaults.
+- Restrict Tailscale `authKeySecretName` to safe identifiers containing letters,
+  digits, dots, underscores, and hyphens, starting with a letter or digit.
+  Existing names containing whitespace or shell metacharacters must be renamed.
+- Share the complete local, CI, and release verification entrypoint.
+
+### Verification fixes
+
+- Decouple freshness behavior fixtures from pinned application versions.
+- Exercise invalid secret settings through the actual service interfaces and
+  force complete consumer assertions and generated systemd units.
+- Validate immutable GitHub Action references and stable release tags against
+  the matching changelog section, without fixing tests to an example release.
+
 ## [0.2.0] - 2026-09-05
 
 ### Breaking

@@ -1,0 +1,7 @@
+name: Tag workflow
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2

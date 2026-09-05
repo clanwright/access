@@ -13,10 +13,15 @@ let
     "stunnel"
     "tailscale"
   ];
-  versions = {
+  productionVersions = {
     tailscale = self.packages.${system}.tailscale.version;
     openssh = self.packages.${system}.openssh.version;
     stunnel = self.packages.${system}.stunnel.version;
+  };
+  testVersions = {
+    tailscale = "1.2.3";
+    openssh = "9.8p1";
+    stunnel = "5.70";
   };
   fixture = name: builtins.fromJSON (builtins.readFile (fixtureDirectory + "/${name}.json"));
   fixtures = {
@@ -31,7 +36,7 @@ let
       "latestObserved"
       "state"
     ]
-    && entry.actual == versions.${name}
+    && entry.actual == testVersions.${name}
     && builtins.elem entry.state [
       "current"
       "lag"
@@ -80,28 +85,28 @@ let
 
     case "''${FRESHNESS_FIXTURE:?missing freshness fixture}:$url" in
       current:https://api.github.com/repos/tailscale/tailscale/releases/latest)
-        printf '%s' '{"tag_name":"v${versions.tailscale}","draft":false,"prerelease":false}' ;;
+        printf '%s' '{"tag_name":"v${testVersions.tailscale}","draft":false,"prerelease":false}' ;;
       current:https://www.stunnel.org/versions.html)
-        printf '%s\n' 'Version 5.9 released' 'Version ${versions.stunnel} released' 'Version 99.99 available' ;;
+        printf '%s\n' 'Version 5.9 released' 'Version ${testVersions.stunnel} released' 'Version 99.99 available' ;;
       current:https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
-        printf '%s\n' 'openssh-10.4p1.tar.gz' 'openssh-${versions.openssh}.tar.gz' ;;
+        printf '%s\n' 'openssh-9.7p1.tar.gz' 'openssh-${testVersions.openssh}.tar.gz' ;;
       lag:https://api.github.com/repos/tailscale/tailscale/releases/latest)
-        printf '%s' '{"tag_name":"v1.104.0","draft":false,"prerelease":false}' ;;
+        printf '%s' '{"tag_name":"v1.2.4","draft":false,"prerelease":false}' ;;
       lag:https://www.stunnel.org/versions.html)
-        printf '%s\n' 'Version 5.9 released' 'Version 5.80 released' 'Version 5.81 released' 'Version 99.99 available' ;;
+        printf '%s\n' 'Version 5.9 released' 'Version 5.70 released' 'Version 5.71 released' 'Version 99.99 available' ;;
       lag:https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
-        printf '%s\n' 'openssh-10.4p1.tar.gz' 'openssh-10.5p1.tar.gz' 'openssh-10.6p1.tar.gz' ;;
+        printf '%s\n' 'openssh-9.7p1.tar.gz' 'openssh-9.8p1.tar.gz' 'openssh-9.9p1.tar.gz' ;;
       unknown:*) exit 22 ;;
       malformed-json:https://api.github.com/repos/tailscale/tailscale/releases/latest)
         printf '%s' '{"tag_name":' ;;
       malformed-stunnel:https://api.github.com/repos/tailscale/tailscale/releases/latest)
-        printf '%s' '{"tag_name":"v${versions.tailscale}","draft":false,"prerelease":false}' ;;
+        printf '%s' '{"tag_name":"v${testVersions.tailscale}","draft":false,"prerelease":false}' ;;
       malformed-stunnel:https://www.stunnel.org/versions.html)
         printf '%s\n' 'no release version here' ;;
       malformed-openssh:https://api.github.com/repos/tailscale/tailscale/releases/latest)
-        printf '%s' '{"tag_name":"v${versions.tailscale}","draft":false,"prerelease":false}' ;;
+        printf '%s' '{"tag_name":"v${testVersions.tailscale}","draft":false,"prerelease":false}' ;;
       malformed-openssh:https://www.stunnel.org/versions.html)
-        printf '%s\n' 'Version ${versions.stunnel} released' ;;
+        printf '%s\n' 'Version ${testVersions.stunnel} released' ;;
       malformed-openssh:https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
         printf '%s\n' 'not an OpenSSH portable archive' ;;
       *)
@@ -113,7 +118,7 @@ let
     pkgs = pkgs // {
       curl = mockCurl;
     };
-    inherit versions;
+    versions = testVersions;
   };
 in
 if !(builtins.pathExists reportSource) || !(builtins.pathExists fixtureDirectory) then
@@ -135,7 +140,11 @@ else
       ];
     }
     ''
-      test -x ${self.packages.${system}.freshness-report}/bin/access-freshness-report
+      production_report=${self.packages.${system}.freshness-report}/bin/access-freshness-report
+      test -x "$production_report"
+      grep -qF 'probe tailscale ${productionVersions.tailscale} https://api.github.com/repos/tailscale/tailscale/releases/latest' "$production_report"
+      grep -qF 'probe_text stunnel ${productionVersions.stunnel} https://www.stunnel.org/versions.html' "$production_report"
+      grep -qF 'probe_text openssh ${productionVersions.openssh} https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/' "$production_report"
       if printf '%s\n' '{"packages":}' | jq -e . >/dev/null 2>&1; then
         echo "malformed freshness metadata was accepted" >&2
         exit 1
@@ -160,9 +169,9 @@ else
       run_report current
       assert_all_endpoints "$TMPDIR/current/curl.log"
       jq -e \
-        --arg tailscale '${versions.tailscale}' \
-        --arg stunnel '${versions.stunnel}' \
-        --arg openssh '${versions.openssh}' '
+        --arg tailscale '${testVersions.tailscale}' \
+        --arg stunnel '${testVersions.stunnel}' \
+        --arg openssh '${testVersions.openssh}' '
           .packages == {
             tailscale: {actual: $tailscale, latestObserved: $tailscale, state: "current"},
             stunnel: {actual: $stunnel, latestObserved: $stunnel, state: "current"},
@@ -173,9 +182,9 @@ else
       run_report lag
       assert_all_endpoints "$TMPDIR/lag/curl.log"
       jq -e '
-        .packages.tailscale == {actual: "${versions.tailscale}", latestObserved: "1.104.0", state: "lag"}
-        and .packages.stunnel == {actual: "${versions.stunnel}", latestObserved: "5.81", state: "lag"}
-        and .packages.openssh == {actual: "${versions.openssh}", latestObserved: "10.6p1", state: "lag"}
+        .packages.tailscale == {actual: "${testVersions.tailscale}", latestObserved: "1.2.4", state: "lag"}
+        and .packages.stunnel == {actual: "${testVersions.stunnel}", latestObserved: "5.71", state: "lag"}
+        and .packages.openssh == {actual: "${testVersions.openssh}", latestObserved: "9.9p1", state: "lag"}
       ' "$TMPDIR/lag/report.json" >/dev/null
 
       run_report unknown

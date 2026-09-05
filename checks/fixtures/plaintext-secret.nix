@@ -1,20 +1,15 @@
+# A boolean marks an invalid setting name; this fixture contains no secret value.
+# The real role interface, rather than a parallel deny-list, decides validity.
 {
-  candidate ? {
-    keySecretValue = true;
-  },
+  lib,
+  interface,
+  candidate ? { },
 }:
-let
-  forbiddenInputs = [
-    "authKeyValue"
-    "credential"
-    "hmacSecretValue"
-    "keySecretValue"
-    "password"
-    "secretValue"
-    "token"
-  ];
-in
-if builtins.any (name: builtins.hasAttr name candidate) forbiddenInputs then
-  throw "secret values are not an Access input"
-else
-  candidate
+builtins.deepSeq
+  (lib.evalModules {
+    modules = [
+      interface
+      { config = candidate; }
+    ];
+  }).config
+  true

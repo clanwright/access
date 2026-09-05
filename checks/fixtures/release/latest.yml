@@ -1,0 +1,7 @@
+name: Latest action workflow
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@latest

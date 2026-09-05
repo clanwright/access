@@ -27,6 +27,18 @@ let
   enabled = moduleFor defaults;
   dnsEnabled = moduleFor (defaults // { acceptDns = true; });
   disabled = moduleFor (defaults // { lifecycle = "disabled-retained"; });
+  interfaceAccepts =
+    authKeySecretName:
+    (builtins.tryEval (
+      builtins.deepSeq
+        (lib.evalModules {
+          modules = [
+            role.interface
+            { config.authKeySecretName = authKeySecretName; }
+          ];
+        }).config.authKeySecretName
+        true
+    )).success;
   unwrap = value: if builtins.isAttrs value && value ? content then unwrap value.content else value;
   consumerPackageChoice =
     (lib.evalModules {
@@ -43,6 +55,10 @@ let
     && service.manifest.name == "@clanwright/tailscale-admin"
     && builtins.attrNames service.roles == [ "admin-access" ]
     && defaults.authKeySecretName == "tailscale-auth-key"
+    && interfaceAccepts "tailscale_auth.key-1"
+    && !(interfaceAccepts "tailscale/auth-key")
+    && !(interfaceAccepts ".tailscale-auth-key")
+    && !(interfaceAccepts "tailscale-auth-key\nunsafe")
     && defaults.lifecycle == "enabled"
     && defaults.useRoutingFeatures == "none"
     && defaults.openFirewall

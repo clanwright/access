@@ -1,0 +1,14 @@
+name: Pinned workflow
+on: push
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/example/tool@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    services:
+      helper:
+        image: ghcr.io/example/helper@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./checks/fixtures/release/local-action
+      - uses: docker://ghcr.io/example/check@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc

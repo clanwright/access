@@ -2,18 +2,18 @@
   "observedAt": "2026-09-04T00:00:00Z",
   "packages": {
     "tailscale": {
-      "actual": "1.102.3",
-      "latestObserved": "1.104.0",
+      "actual": "1.2.3",
+      "latestObserved": "1.2.4",
       "state": "lag"
     },
     "openssh": {
-      "actual": "10.5p1",
-      "latestObserved": "10.5p1",
+      "actual": "9.8p1",
+      "latestObserved": "9.8p1",
       "state": "current"
     },
     "stunnel": {
-      "actual": "5.80",
-      "latestObserved": "5.80",
+      "actual": "5.70",
+      "latestObserved": "5.70",
       "state": "current"
     }
   }

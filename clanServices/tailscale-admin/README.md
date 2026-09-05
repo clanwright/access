@@ -7,13 +7,13 @@ consumer-owned.
 
 ## Settings and defaults
 
-| Setting              | Default              |
-| -------------------- | -------------------- |
-| `authKeySecretName`  | `tailscale-auth-key` |
-| `lifecycle`          | `enabled`            |
-| `useRoutingFeatures` | `none`               |
-| `openFirewall`       | `true`               |
-| `acceptDns`          | `false`              |
+| Setting              | Default              | Constraint                                   |
+| -------------------- | -------------------- | -------------------------------------------- |
+| `authKeySecretName`  | `tailscale-auth-key` | Safe SOPS name: `[A-Za-z0-9][A-Za-z0-9._-]*` |
+| `lifecycle`          | `enabled`            | `enabled` or `disabled-retained`             |
+| `useRoutingFeatures` | `none`               | `none`, `client`, `server`, or `both`        |
+| `openFirewall`       | `true`               | Boolean                                      |
+| `acceptDns`          | `false`              | Boolean                                      |
 
 `lifecycle = "disabled-retained"` preserves configuration and state ownership
 while disabling the daemon. It never creates an ordinary `sshd` unit or adds a
@@ -30,6 +30,10 @@ loosens reverse-path filtering, and `server` enables forwarding in NixOS.
 The service declares `/var/lib/tailscale` as Clan state. The auth key is read
 only from `config.sops.secrets.<authKeySecretName>.path` with root ownership and
 mode `0400`; Access never owns or receives the value.
+
+`authKeySecretName` must start with an ASCII letter or digit and may contain
+only ASCII letters, digits, `.`, `_`, and `-`. This prevents the name from
+injecting a path or configuration fragment when used as a SOPS attribute.
 
 Prefer a one-off, expiring enrollment key; its expiry does not revoke an already
 enrolled node. Node-key expiry and tagged-device policy are separate consumer

@@ -5,22 +5,13 @@
   self,
 }:
 let
-  fixture = import ./fixtures/consumer.nix;
   moduleIds = [
     "@clanwright/stunnel-ssh-breakglass"
     "@clanwright/tailscale-admin"
   ];
-  consumer = inputs.clan-core.lib.clan {
-    self.inputs = {
-      access = self;
-      self.clan = consumer.config;
-    };
-    specialArgs.clan-core = inputs.clan-core;
-    directory = root;
-    imports = [ fixture ];
-  };
+  consumer = (import ./lib/consumer.nix { inherit inputs root self; }) { };
   inventory = consumer.config.inventory;
-  machine = consumer.config.nixosConfigurations.access-node.config;
+  machine = consumer.machine;
   contract =
     machine.services.tailscale.enable
     && machine.users.users ? fixture-recovery

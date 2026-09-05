@@ -21,22 +21,5 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-      - name: Check formatting
-        run: |
-          git ls-files -z '*.nix' | xargs -0 nix develop --command nixfmt --check
-          nix develop --command prettier --check "**/*.{md,json,json5,yml,yaml}"
-      - name: Run static checks
-        run: |
-          git diff --check
-          nix develop --command actionlint
-          nix develop --command renovate-config-validator renovate.json5
-      - name: Scan for leaked secrets
-        run: nix develop --command gitleaks dir . --no-banner --redact
-      - name: Check all flake outputs
-        run: nix flake check --all-systems --no-write-lock-file --option allow-import-from-derivation false
-      - name: Build authoritative packages
-        run: >-
-          nix build --no-write-lock-file
-          .#packages.x86_64-linux.tailscale
-          .#packages.x86_64-linux.stunnel
-          .#packages.x86_64-linux.openssh
+      - name: Run complete verification
+        run: bash scripts/verify.sh

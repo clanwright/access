@@ -22,6 +22,9 @@ the reusable Clan service recipes that configure them.
 - Use native Clan `clan.modules` exports and consumer-native NixOS modules.
 - Run focused checks after every change and `nix flake check
 --no-write-lock-file` before review.
+- Do not add or run NixOS VM, QEMU, or KVM tests locally or in CI. Verify Access with
+  evaluation, schema and assertion checks, generated-configuration parsing,
+  and package builds. Live consumer runtime acceptance is separate owner scope.
 - Run a redacted full-tree secret scan before every commit.
 - Hosted workflows are secret-free and may test or report freshness only. They
   never merge, release, deploy, or modify a consumer lock.
