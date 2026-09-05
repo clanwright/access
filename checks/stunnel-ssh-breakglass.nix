@@ -77,17 +77,10 @@ let
   accessOpenSSH = self.packages.${system}.openssh;
   pskSecret = config.sops.secrets.${defaults.pskSecretName};
   authorizedKeysSecret = config.sops.secrets.${defaults.authorizedKeysSecretName};
-  sshdConfigMatch = builtins.match ".* -f (.*)" sshdUnit.serviceConfig.ExecStart;
-  sshdConfig = builtins.appendContext (builtins.head sshdConfigMatch) (
-    builtins.getContext sshdUnit.serviceConfig.ExecStart
-  );
-  sshdConfigText = builtins.readFile sshdConfig;
+  sshdExecStart = sshdUnit.serviceConfig.ExecStart;
   stunnelConfigRenderer = builtins.head (lib.toList stunnelUnit.serviceConfig.ExecStartPre);
-  stunnelConfigRendererText = builtins.readFile stunnelConfigRenderer;
   authorizedKeysRenderer = builtins.head sshdUnit.serviceConfig.ExecStartPre;
-  authorizedKeysRendererText = builtins.readFile authorizedKeysRenderer;
   hostKeyGenerator = hostKeyUnit.serviceConfig.ExecStart;
-  hostKeyGeneratorText = builtins.readFile hostKeyGenerator;
 
   optionNames = builtins.attrNames (
     builtins.removeAttrs ((lib.evalModules { modules = [ role.interface ]; }).options) [ "_module" ]
@@ -243,7 +236,10 @@ let
     && sshdUnit.requires == [ "${hostKeyServiceName}.service" ]
     && !sshdUnit.stopIfChanged
     && sshdUnit.serviceConfig.Type == "simple"
-    && sshdUnit.serviceConfig.ExecStart == "${accessOpenSSH}/bin/sshd -D -e -f ${sshdConfig}"
+    && lib.hasPrefix "${accessOpenSSH}/bin/sshd -D -e -f /nix/store/" sshdExecStart
+    && lib.hasPrefix "${accessOpenSSH}/bin/sshd -t -f /nix/store/" (
+      builtins.elemAt sshdUnit.serviceConfig.ExecStartPre 1
+    )
     && sshdUnit.serviceConfig.RuntimeDirectory == sshdServiceName
     && sshdUnit.serviceConfig.RuntimeDirectoryMode == "0750"
     &&
@@ -267,32 +263,70 @@ let
     && hostKeyUnit.serviceConfig.PrivateDevices
     && hostKeyUnit.serviceConfig.ProtectSystem == "strict"
     && hostKeyUnit.serviceConfig.ProtectHome
-    && !lib.hasInfix "/run/secrets/" stunnelConfigRendererText
-    && !lib.hasInfix "cert =" stunnelConfigRendererText
-    && !lib.hasInfix "TLSv1.2" stunnelConfigRendererText
-    && !lib.hasInfix "ciphers =" stunnelConfigRendererText
-    && lib.hasInfix "[ssh]" stunnelConfigRendererText
-    && lib.hasInfix "invalid stunnel PSK record" stunnelConfigRendererText
-    && lib.hasInfix "[0-9a-f]{64}" stunnelConfigRendererText
-    && lib.hasInfix "PSKsecrets = $CREDENTIALS_DIRECTORY/psk" stunnelConfigRendererText
-    && lib.hasInfix "accept = 0.0.0.0:47291" stunnelConfigRendererText
-    && lib.hasInfix "connect = 127.0.0.1:47292" stunnelConfigRendererText
-    && lib.hasInfix "sslVersionMin = TLSv1.3" stunnelConfigRendererText
-    && lib.hasInfix "sslVersionMax = TLSv1.3" stunnelConfigRendererText
-    && lib.hasInfix "sessionResume = no" stunnelConfigRendererText
-    && lib.hasInfix "sessionCacheSize = 100" stunnelConfigRendererText
-    && lib.hasInfix "TIMEOUTbusy = 30" stunnelConfigRendererText
-    && lib.hasInfix "TIMEOUTconnect = 10" stunnelConfigRendererText
-    && lib.hasInfix "TIMEOUTidle = 900" stunnelConfigRendererText
-    && lib.hasInfix "install -m 0440 -o root -g access-recovery" authorizedKeysRendererText
-    && lib.hasInfix "authorized-keys" authorizedKeysRendererText
-    && lib.hasInfix "invalid recovery authorized-key file" authorizedKeysRendererText
-    && lib.hasInfix "ssh-keygen -lf \"$CREDENTIALS_DIRECTORY/authorized-keys\" >/dev/null 2>&1" authorizedKeysRendererText
-    && lib.hasInfix "ssh-keygen -q -t ed25519" hostKeyGeneratorText;
+    && builtins.length (lib.toList stunnelUnit.serviceConfig.ExecStartPre) == 1;
 in
 if contract then
   pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
-    ${accessOpenSSH}/bin/sshd -G -T -f ${sshdConfig} > "$TMPDIR/effective-sshd-config"
+    require_fragment() {
+      label="$1"
+      path="$2"
+      fragment="$3"
+
+      if ! ${pkgs.gnugrep}/bin/grep -qF -- "$fragment" "$path"; then
+        echo "missing $label fragment: $fragment" >&2
+        ${pkgs.coreutils}/bin/cat "$path" >&2
+        exit 1
+      fi
+    }
+
+    reject_fragment() {
+      label="$1"
+      path="$2"
+      fragment="$3"
+
+      if ${pkgs.gnugrep}/bin/grep -qF -- "$fragment" "$path"; then
+        echo "unexpected $label fragment: $fragment" >&2
+        ${pkgs.coreutils}/bin/cat "$path" >&2
+        exit 1
+      fi
+    }
+
+    stunnel_renderer=${lib.escapeShellArg stunnelConfigRenderer}
+    authorized_keys_renderer=${lib.escapeShellArg authorizedKeysRenderer}
+    host_key_generator=${lib.escapeShellArg hostKeyGenerator}
+    sshd_start=${lib.escapeShellArg sshdExecStart}
+    sshd_config="''${sshd_start#* -f }"
+
+    if [ "$sshd_config" = "$sshd_start" ] || [ ! -r "$sshd_config" ]; then
+      echo "could not derive readable sshd config from generated ExecStart" >&2
+      echo "$sshd_start" >&2
+      exit 1
+    fi
+
+    reject_fragment stunnel-renderer "$stunnel_renderer" '/run/secrets/'
+    reject_fragment stunnel-renderer "$stunnel_renderer" 'cert ='
+    reject_fragment stunnel-renderer "$stunnel_renderer" 'TLSv1.2'
+    reject_fragment stunnel-renderer "$stunnel_renderer" 'ciphers ='
+    require_fragment stunnel-renderer "$stunnel_renderer" '[ssh]'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'invalid stunnel PSK record'
+    require_fragment stunnel-renderer "$stunnel_renderer" '[0-9a-f]{64}'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'PSKsecrets = $CREDENTIALS_DIRECTORY/psk'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'accept = 0.0.0.0:47291'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'connect = 127.0.0.1:47292'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'sslVersionMin = TLSv1.3'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'sslVersionMax = TLSv1.3'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'sessionResume = no'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'sessionCacheSize = 100'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'TIMEOUTbusy = 30'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'TIMEOUTconnect = 10'
+    require_fragment stunnel-renderer "$stunnel_renderer" 'TIMEOUTidle = 900'
+    require_fragment authorized-keys-renderer "$authorized_keys_renderer" 'install -m 0440 -o root -g access-recovery'
+    require_fragment authorized-keys-renderer "$authorized_keys_renderer" 'authorized-keys'
+    require_fragment authorized-keys-renderer "$authorized_keys_renderer" 'invalid recovery authorized-key file'
+    require_fragment authorized-keys-renderer "$authorized_keys_renderer" 'ssh-keygen -lf "$CREDENTIALS_DIRECTORY/authorized-keys" >/dev/null 2>&1'
+    require_fragment host-key-generator "$host_key_generator" 'ssh-keygen -q -t ed25519'
+
+    ${accessOpenSSH}/bin/sshd -G -T -f "$sshd_config" > "$TMPDIR/effective-sshd-config"
 
     require_setting() {
       if ! grep -qxiF "$1" "$TMPDIR/effective-sshd-config"; then

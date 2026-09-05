@@ -9,7 +9,7 @@ nix develop --command prettier --check "**/*.{md,json,json5,yml,yaml}"
 nix develop --command actionlint
 nix develop --command renovate-config-validator renovate.json5
 nix develop --command gitleaks dir . --no-banner --redact
-nix flake check --all-systems --no-write-lock-file
+nix flake check --all-systems --no-write-lock-file --option allow-import-from-derivation false
 nix build --no-write-lock-file \
   .#packages.x86_64-linux.tailscale \
   .#packages.x86_64-linux.stunnel \
@@ -21,6 +21,10 @@ single and combined external placement, package precedence, secret metadata,
 repository policy, Renovate policy, release policy, and freshness schema
 checks. The deliberate package-authority and plaintext-secret fixtures must
 fail with their named errors; they never contain or read a credential value.
+
+Import-from-derivation is disabled in the gate: generated configuration and
+script contents are inspected during check builds, never during evaluation.
+This keeps evaluation independent of a developer's populated build cache.
 
 Placement checks force the real Clan-generated NixOS service configuration,
 including per-machine setting overrides; they are not inventory-only checks.

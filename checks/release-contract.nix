@@ -27,6 +27,8 @@ else
       grep -qF 'git merge-base --is-ancestor' "$src/.github/workflows/release-gate.yml"
       grep -qF 'nix flake check --all-systems --no-write-lock-file' "$src/.github/workflows/ci.yml"
       grep -qF 'nix flake check --all-systems --no-write-lock-file' "$src/.github/workflows/release-gate.yml"
+      grep -qF -- '--option allow-import-from-derivation false' "$src/.github/workflows/ci.yml"
+      grep -qF -- '--option allow-import-from-derivation false' "$src/.github/workflows/release-gate.yml"
       grep -qF 'workflow_dispatch:' "$src/.github/workflows/freshness.yml"
       grep -qF 'access-freshness.json' "$src/.github/workflows/freshness.yml"
       grep -qF 'access-freshness.json' "$src/.github/workflows/release-gate.yml"
