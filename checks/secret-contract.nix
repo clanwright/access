@@ -14,6 +14,27 @@ let
     (import ../clanServices/tailscale-admin/default.nix { inherit self; }).roles.admin-access;
   emergencyRole =
     (import ../clanServices/stunnel-ssh-breakglass/default.nix { inherit self; }).roles.breakglass;
+  evaluateSettings =
+    role: candidate:
+    builtins.tryEval (
+      import ./fixtures/plaintext-secret.nix {
+        inherit lib candidate;
+        inherit (role) interface;
+      }
+    );
+  # Positive controls distinguish a working evaluator from universal failure.
+  roleRejectsPlaintext =
+    role:
+    (evaluateSettings role { }).success
+    && builtins.all (name: !(evaluateSettings role { ${name} = true; }).success) [
+      "authKeyValue"
+      "credential"
+      "hmacSecretValue"
+      "keySecretValue"
+      "password"
+      "secretValue"
+      "token"
+    ];
   defaults = (lib.evalModules { modules = [ tailscaleRole.interface ]; }).config;
   tailscale = (tailscaleRole.perInstance { settings = defaults; }).nixosModule {
     config.sops.secrets.${defaults.authKeySecretName}.path =
@@ -41,7 +62,8 @@ let
     && secret.owner == "root"
     && secret.group == "root"
     && secret.mode == "0400"
-    && !(builtins.tryEval (import ./fixtures/plaintext-secret.nix { })).success
+    && roleRejectsPlaintext tailscaleRole
+    && roleRejectsPlaintext emergencyRole
     && builtins.all (name: !(builtins.pathExists (root + "/${name}"))) [
       "sops"
       "vars"

@@ -15,19 +15,24 @@ has passed the release gate, and has a matching stable GitHub Release.
 
 1. Merge the reviewed candidate through protected `main` after CI passes.
 2. Copy the matching CHANGELOG section as the proposed release body.
-3. In the owner's terminal, create and push the signed tag:
+3. Choose the exact stable tag and verify its matching CHANGELOG heading:
 
    ```bash
-   git tag -s -a v0.2.0 -m "Access v0.2.0" <release-commit>
-   git push origin v0.2.0
+   release_tag=vX.Y.Z
+   nix develop --no-write-lock-file --command python3 scripts/verify-release.py --metadata-only --tag "$release_tag"
    ```
 
-4. Wait for `release-gate.yml` to pass. It verifies main ancestry, reruns the
+4. In the owner's terminal, create and push the signed tag with
+   `git tag -s -a "$release_tag" -m "Access $release_tag" <release-commit>` and
+   `git push origin "$release_tag"`.
+
+5. Wait for `release-gate.yml` to pass. It verifies the exact stable tag,
+   matching CHANGELOG heading, annotation, and main ancestry; reruns the
    complete gate, and produces `access-freshness.json`; it never publishes a
    release.
-5. Manually create a non-draft, non-prerelease GitHub Release for the exact tag,
+6. Manually create a non-draft, non-prerelease GitHub Release for the exact tag,
    paste the unchanged CHANGELOG section, and attach `access-freshness.json`.
-6. Verify the tag signature, main ancestry, stable Release metadata, and
+7. Verify the tag signature, main ancestry, stable Release metadata, and
    attached artifact before any consumer update.
 
 Publishing Access and updating a consumer are separate reviewed transactions.

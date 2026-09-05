@@ -1,6 +1,12 @@
 {
   machines.access-node = {
     nixpkgs.hostPlatform = "x86_64-linux";
+    # Evaluation-only container; all credential references are runtime paths.
+    boot.isContainer = true;
+    # Replace Clan's generated empty fallback with static empty metadata so
+    # evaluation can hash it without import-from-derivation. No payload exists.
+    sops.defaultSopsFile = ./empty-sops.yaml;
+    sops.age.keyFile = "/run/access-consumer-fixture/age-key";
     system.stateVersion = "26.11";
   };
   inventory = {

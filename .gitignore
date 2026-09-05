@@ -4,3 +4,4 @@ result-*
 .env
 .env.*
 .work/
+__pycache__/

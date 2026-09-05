@@ -14,8 +14,9 @@
       {
         options = {
           authKeySecretName = lib.mkOption {
-            type = lib.types.str;
+            type = lib.types.strMatching "[A-Za-z0-9][A-Za-z0-9._-]*";
             default = "tailscale-auth-key";
+            description = "Safe SOPS secret name containing the Tailscale authentication key.";
           };
           lifecycle = lib.mkOption {
             type = lib.types.enum [

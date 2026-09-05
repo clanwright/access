@@ -44,6 +44,7 @@
                   pkgs.gitleaks
                   pkgs.nixfmt
                   pkgs.prettier
+                  (pkgs.python3.withPackages (packages: [ packages.pyyaml ]))
                   pkgs.renovate
                 ];
               };
