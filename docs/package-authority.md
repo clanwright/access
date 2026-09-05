@@ -2,13 +2,14 @@
 
 Access has one root `nixpkgs` input. `clan-core` and flake-parts follow that
 pin, so each Access release identifies one tested package and library closure.
-The public application outputs are `tailscale`, `fail2ban`, and `fwknop` for
+The public application outputs are `tailscale`, `stunnel`, and `openssh` for
 `x86_64-linux`.
 
-Tailscale and Fail2ban use the NixOS modules supplied by the consumer's
-nixpkgs. Their `package` options are forced to the matching Access outputs.
-fwknop is a custom unit: only its daemon path comes from Access, while OpenSSH,
-iptables, coreutils, shell, and systemd remain in the consumer context. Access
+Tailscale uses the NixOS module supplied by the consumer's nixpkgs, with its
+`package` option forced to the matching Access output. The emergency service
+uses owned units: stunnel, sshd and host-key generation use Access packages.
+Coreutils, shell, PAM, sudo and systemd remain in the consumer context. The
+consumer's ordinary OpenSSH service is not enabled or repackaged by Access. Access
 does not export an overlay, NixOS module stack, package selector, or package
 override option.
 

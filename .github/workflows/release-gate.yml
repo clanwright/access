@@ -45,8 +45,8 @@ jobs:
         run: >-
           nix build --no-write-lock-file
           .#packages.x86_64-linux.tailscale
-          .#packages.x86_64-linux.fail2ban
-          .#packages.x86_64-linux.fwknop
+          .#packages.x86_64-linux.stunnel
+          .#packages.x86_64-linux.openssh
       - name: Generate freshness metadata
         run: nix run .#freshness-report -- --output access-freshness.json
       - name: Upload release freshness metadata

@@ -5,6 +5,8 @@ pkgs.writeShellApplication {
     pkgs.coreutils
     pkgs.curl
     pkgs.jq
+    pkgs.gnugrep
+    pkgs.gnused
   ];
   text = ''
     set -euo pipefail
@@ -90,12 +92,40 @@ pkgs.writeShellApplication {
     }
 
     probe tailscale ${versions.tailscale} https://api.github.com/repos/tailscale/tailscale/releases/latest
-    probe fail2ban ${versions.fail2ban} https://api.github.com/repos/fail2ban/fail2ban/releases/latest
-    probe fwknop ${versions.fwknop} https://api.github.com/repos/mrash/fwknop/releases/latest
+    probe_text() {
+      name="$1"
+      actual="$2"
+      url="$3"
+      if ! response="$(curl --fail --silent --show-error --location \
+        --connect-timeout 5 --max-time 10 --retry 0 \
+        --header 'User-Agent: clanwright-access-freshness' "$url" 2>/dev/null)"; then
+        update_report "$name" "$actual" unknown __NULL__
+        return
+      fi
+      case "$name" in
+        stunnel)
+          latest="$(printf '%s' "$response" | { grep -oE 'Version [0-9]+\.[0-9]+ released' || true; } |
+            sed -E 's/^Version //; s/ released$//' | sort -Vu | tail -n 1)" ;;
+        openssh)
+          latest="$(printf '%s' "$response" | { grep -oE 'openssh-[0-9]+\.[0-9]+p[0-9]+\.tar\.gz' || true; } |
+            sed -E 's/^openssh-//; s/\.tar\.gz$//' | sort -Vu | tail -n 1)" ;;
+        *) exit 2 ;;
+      esac
+      if [ -z "$latest" ]; then
+        echo "malformed release metadata for $name" >&2
+        exit 1
+      fi
+      newest="$(printf '%s\n%s\n' "$actual" "$latest" | sort -V | tail -n 1)"
+      if [ "$newest" = "$actual" ]; then state=current; else state=lag; fi
+      update_report "$name" "$actual" "$state" "$latest"
+    }
+
+    probe_text stunnel ${versions.stunnel} https://www.stunnel.org/versions.html
+    probe_text openssh ${versions.openssh} https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/
 
     if ! jq -e '
       (.observedAt | type == "string") and
-      (.packages | keys == ["fail2ban", "fwknop", "tailscale"]) and
+      (.packages | keys == ["openssh", "stunnel", "tailscale"]) and
       ([.packages[] |
         (.actual | type == "string") and
         ((.latestObserved | type == "string") or .latestObserved == null) and

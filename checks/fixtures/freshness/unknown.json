@@ -6,14 +6,14 @@
       "latestObserved": null,
       "state": "unknown"
     },
-    "fail2ban": {
-      "actual": "1.1.1",
-      "latestObserved": "1.1.1",
+    "openssh": {
+      "actual": "10.5p1",
+      "latestObserved": "10.5p1",
       "state": "current"
     },
-    "fwknop": {
-      "actual": "2.6.11",
-      "latestObserved": "2.6.11",
+    "stunnel": {
+      "actual": "5.80",
+      "latestObserved": "5.80",
       "state": "current"
     }
   }

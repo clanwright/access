@@ -23,7 +23,7 @@
               "disabled-retained"
             ];
             default = "enabled";
-            description = "Whether Tailscale runtime and its SSH ordering edge are active.";
+            description = "Whether the Tailscale runtime is active; retained state is never deleted.";
           };
           useRoutingFeatures = lib.mkOption {
             type = lib.types.enum [
@@ -32,7 +32,7 @@
               "server"
               "both"
             ];
-            default = "client";
+            default = "none";
           };
           openFirewall = lib.mkOption {
             type = lib.types.bool;
@@ -73,11 +73,15 @@
               enable = enabled;
               package = lib.mkForce self.packages.${pkgs.stdenv.hostPlatform.system}.tailscale;
               authKeyFile = config.sops.secrets."${settings.authKeySecretName}".path;
-              extraUpFlags = if settings.acceptDns then [ ] else [ "--accept-dns=false" ];
-              extraSetFlags = if settings.acceptDns then [ ] else [ "--accept-dns=false" ];
+              extraUpFlags = [
+                "--accept-dns=${lib.boolToString settings.acceptDns}"
+                "--ssh=false"
+              ];
+              extraSetFlags = [
+                "--accept-dns=${lib.boolToString settings.acceptDns}"
+                "--ssh=false"
+              ];
             };
-
-            systemd.services.sshd.wants = lib.mkIf enabled [ "tailscaled.service" ];
           };
       };
   };

@@ -55,14 +55,14 @@
                     inherit pkgs;
                     versions = {
                       tailscale = pkgs.tailscale.version;
-                      fail2ban = pkgs.fail2ban.version;
-                      fwknop = pkgs.fwknop.version;
+                      stunnel = pkgs.stunnel.version;
+                      openssh = pkgs.openssh.version;
                     };
                   };
                 in
                 {
                   packages = {
-                    inherit (pkgs) tailscale fail2ban fwknop;
+                    inherit (pkgs) tailscale stunnel openssh;
                     freshness-report = freshnessReport;
                   };
                   checks = import ./checks {

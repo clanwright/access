@@ -21,8 +21,8 @@ let
   packages = self.packages.${system} or { };
   packageContract = builtins.all (name: builtins.hasAttr name packages) [
     "tailscale"
-    "fail2ban"
-    "fwknop"
+    "stunnel"
+    "openssh"
   ];
   inputContract =
     inputs ? clan-core

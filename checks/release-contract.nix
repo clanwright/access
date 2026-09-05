@@ -30,7 +30,7 @@ else
       grep -qF 'workflow_dispatch:' "$src/.github/workflows/freshness.yml"
       grep -qF 'access-freshness.json' "$src/.github/workflows/freshness.yml"
       grep -qF 'access-freshness.json' "$src/.github/workflows/release-gate.yml"
-      grep -qF 'git tag -s -a v0.1.0' "$src/docs/releases.md"
+      grep -qF 'git tag -s -a v0.2.0' "$src/docs/releases.md"
       grep -qF '## [0.1.0]' "$src/CHANGELOG.md"
 
       if grep -RE 'uses: [^ ]+@(v[0-9]+|main|master)([[:space:]]|$)' "$src/.github/workflows"; then

@@ -1,7 +1,7 @@
 # Project Context
 
 Access is a public, versioned Clan flake for administrative access and SSH
-protection. It owns the Tailscale, Fail2ban, and fwknop application closures and
+protection. It owns the Tailscale, stunnel, and OpenSSH application closures and
 the reusable Clan service recipes that configure them.
 
 ## Authority

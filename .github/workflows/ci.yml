@@ -38,5 +38,5 @@ jobs:
         run: >-
           nix build --no-write-lock-file
           .#packages.x86_64-linux.tailscale
-          .#packages.x86_64-linux.fail2ban
-          .#packages.x86_64-linux.fwknop
+          .#packages.x86_64-linux.stunnel
+          .#packages.x86_64-linux.openssh
