@@ -5,13 +5,21 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
+### Breaking
+
+- Restrict `authKeySecretName` on module `@clanwright/tailscale-admin`, role
+  `admin-access`, to `[A-Za-z0-9][A-Za-z0-9._-]*`: the first character must be
+  an ASCII letter or digit, and every remaining character must be an ASCII
+  letter, digit, dot, underscore, or hyphen. Rename any incompatible consumer
+  secret identifier before updating; see the
+  [migration notes](https://github.com/clanwright/access/blob/v0.3.0/docs/migration-v0.3.0.md).
+
 ### Changed
 
 - Separate the breakglass interface, NixOS runtime, and configuration rendering
   without changing the public module IDs or runtime defaults.
-- Restrict Tailscale `authKeySecretName` to safe identifiers containing letters,
-  digits, dots, underscores, and hyphens, starting with a letter or digit.
-  Existing names containing whitespace or shell metacharacters must be renamed.
 - Share the complete local, CI, and release verification entrypoint.
 
 ### Verification fixes
