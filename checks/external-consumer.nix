@@ -7,8 +7,7 @@
 let
   fixture = import ./fixtures/consumer.nix;
   moduleIds = [
-    "@clanwright/fail2ban-ssh"
-    "@clanwright/fwknop-ssh-breakglass"
+    "@clanwright/stunnel-ssh-breakglass"
     "@clanwright/tailscale-admin"
   ];
   consumer = inputs.clan-core.lib.clan {
@@ -21,13 +20,18 @@ let
     imports = [ fixture ];
   };
   inventory = consumer.config.inventory;
+  machine = consumer.config.nixosConfigurations.access-node.config;
   contract =
-    builtins.deepSeq consumer.config._services.allServices true
+    machine.services.tailscale.enable
+    && machine.users.users ? fixture-recovery
+    && builtins.elem "--accept-dns=true" machine.services.tailscale.extraSetFlags
+    && !machine.services.openssh.enable
+    && builtins.isString machine.systemd.services.stunnel-ssh-breakglass.serviceConfig.ExecStart
+    && builtins.isString machine.systemd.services.stunnel-ssh-breakglass-sshd.serviceConfig.ExecStart
     && builtins.attrNames self.clan.modules == moduleIds
     &&
       builtins.attrNames inventory.instances == [
-        "fail2ban-ssh"
-        "fwknop-ssh-breakglass"
+        "stunnel-ssh-breakglass"
         "tailscale-admin"
       ]
     && builtins.all (

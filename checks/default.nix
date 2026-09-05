@@ -25,16 +25,7 @@
       ;
     lib = inputs.nixpkgs.lib;
   };
-  fail2ban-ssh-contract = import ./fail2ban-ssh.nix {
-    inherit
-      inputs
-      pkgs
-      self
-      system
-      ;
-    lib = inputs.nixpkgs.lib;
-  };
-  fwknop-ssh-breakglass-contract = import ./fwknop-ssh-breakglass.nix {
+  stunnel-ssh-breakglass-contract = import ./stunnel-ssh-breakglass.nix {
     inherit
       inputs
       pkgs

@@ -1,6 +1,6 @@
 # Releases
 
-Access uses SemVer and releases all three bricks atomically. During `0.x`, a
+Access uses SemVer and releases both bricks and all three packages atomically. During `0.x`, a
 known public API break increments the minor version; patches are intended to be
 compatible. Every break names the affected module IDs, roles, settings,
 exports, or secret interfaces and includes migration notes. After `v1`, those
@@ -18,8 +18,8 @@ has passed the release gate, and has a matching stable GitHub Release.
 3. In the owner's terminal, create and push the signed tag:
 
    ```bash
-   git tag -s -a v0.1.0 -m "Access v0.1.0" <release-commit>
-   git push origin v0.1.0
+   git tag -s -a v0.2.0 -m "Access v0.2.0" <release-commit>
+   git push origin v0.2.0
    ```
 
 4. Wait for `release-gate.yml` to pass. It verifies main ancestry, reruns the

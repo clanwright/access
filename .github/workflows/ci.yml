@@ -33,10 +33,10 @@ jobs:
       - name: Scan for leaked secrets
         run: nix develop --command gitleaks dir . --no-banner --redact
       - name: Check all flake outputs
-        run: nix flake check --all-systems --no-write-lock-file
+        run: nix flake check --all-systems --no-write-lock-file --option allow-import-from-derivation false
       - name: Build authoritative packages
         run: >-
           nix build --no-write-lock-file
           .#packages.x86_64-linux.tailscale
-          .#packages.x86_64-linux.fail2ban
-          .#packages.x86_64-linux.fwknop
+          .#packages.x86_64-linux.stunnel
+          .#packages.x86_64-linux.openssh

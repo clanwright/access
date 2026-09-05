@@ -25,6 +25,7 @@ let
       inherit lib pkgs;
     };
   enabled = moduleFor defaults;
+  dnsEnabled = moduleFor (defaults // { acceptDns = true; });
   disabled = moduleFor (defaults // { lifecycle = "disabled-retained"; });
   unwrap = value: if builtins.isAttrs value && value ? content then unwrap value.content else value;
   consumerPackageChoice =
@@ -43,19 +44,37 @@ let
     && builtins.attrNames service.roles == [ "admin-access" ]
     && defaults.authKeySecretName == "tailscale-auth-key"
     && defaults.lifecycle == "enabled"
-    && defaults.useRoutingFeatures == "client"
+    && defaults.useRoutingFeatures == "none"
     && defaults.openFirewall
     && !defaults.acceptDns
     && enabled.services.tailscale.enable
     && !(disabled.services.tailscale.enable)
     && enabled.services.tailscale.authKeyFile == "/run/secrets/tailscale-auth-key"
-    && enabled.services.tailscale.extraUpFlags == [ "--accept-dns=false" ]
-    && enabled.services.tailscale.extraSetFlags == [ "--accept-dns=false" ]
+    &&
+      enabled.services.tailscale.extraUpFlags == [
+        "--accept-dns=false"
+        "--ssh=false"
+      ]
+    &&
+      enabled.services.tailscale.extraSetFlags == [
+        "--accept-dns=false"
+        "--ssh=false"
+      ]
+    &&
+      dnsEnabled.services.tailscale.extraUpFlags == [
+        "--accept-dns=true"
+        "--ssh=false"
+      ]
+    &&
+      dnsEnabled.services.tailscale.extraSetFlags == [
+        "--accept-dns=true"
+        "--ssh=false"
+      ]
     && unwrap enabled.services.tailscale.package == self.packages.${system}.tailscale
     && consumerPackageChoice == self.packages.${system}.tailscale
     && enabled.clan.core.state.tailscale.folders == [ "/var/lib/tailscale" ]
-    && enabled.systemd.services.sshd.wants.condition
-    && !(disabled.systemd.services.sshd.wants.condition)
+    && !(enabled ? systemd)
+    && !(disabled ? systemd)
     && enabled.sops.secrets.tailscale-auth-key.owner == "root"
     && enabled.sops.secrets.tailscale-auth-key.group == "root"
     && enabled.sops.secrets.tailscale-auth-key.mode == "0400";

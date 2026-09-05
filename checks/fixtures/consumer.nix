@@ -1,4 +1,8 @@
 {
+  machines.access-node = {
+    nixpkgs.hostPlatform = "x86_64-linux";
+    system.stateVersion = "26.11";
+  };
   inventory = {
     meta.name = "access-consumer-fixture";
     machines.access-node = { };
@@ -8,21 +12,18 @@
           input = "access";
           name = "@clanwright/tailscale-admin";
         };
-        roles.admin-access.machines.access-node.settings = { };
+        roles.admin-access.machines.access-node.settings.acceptDns = true;
       };
-      fail2ban-ssh = {
+      stunnel-ssh-breakglass = {
         module = {
           input = "access";
-          name = "@clanwright/fail2ban-ssh";
+          name = "@clanwright/stunnel-ssh-breakglass";
         };
-        roles.ssh-guard.machines.access-node.settings = { };
-      };
-      fwknop-ssh-breakglass = {
-        module = {
-          input = "access";
-          name = "@clanwright/fwknop-ssh-breakglass";
+        roles.breakglass.machines.access-node.settings = {
+          tlsPort = 48111;
+          sshPort = 48112;
+          recoveryUser = "fixture-recovery";
         };
-        roles.breakglass.machines.access-node.settings = { };
       };
     };
   };

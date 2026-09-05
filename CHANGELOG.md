@@ -5,6 +5,30 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-05
+
+### Breaking
+
+- Replace `@clanwright/fail2ban-ssh` and `@clanwright/fwknop-ssh-breakglass`
+  with `@clanwright/stunnel-ssh-breakglass`, role `breakglass`: TLS 1.3 PSK
+  protects a separate loopback-only, public-key-authenticated OpenSSH daemon.
+- Remove `fail2ban` and `fwknop` package exports; publish authoritative `stunnel`
+  and `openssh` closures alongside `tailscale`.
+- Default Tailscale routing features to `none` and explicitly disable Tailscale
+  SSH in favor of consumer-owned ordinary OpenSSH.
+
+### Security and fixes
+
+- Isolate emergency host keys, authorized keys, account and service lifecycle
+  from ordinary sshd and Tailscale. Recovery has explicit root-equivalent sudo;
+  password/root login and SSH forwarding are disabled.
+- Apply both true and false DNS preferences to existing Tailscale state.
+- Stop creating a dependency-only ordinary sshd unit from the Tailscale role.
+- Update service/package/secret contracts and freshness sources for the new stack.
+
+See [migration notes](docs/migration-v0.2.0.md). This release does not deploy,
+rotate secrets, create a recovery repository, or update consumer locks.
+
 ## [0.1.0] - 2026-09-04
 
 ### Added

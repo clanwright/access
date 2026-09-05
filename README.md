@@ -1,14 +1,13 @@
 # Access
 
 Access is a versioned Clan service bundle for administrative connectivity and
-SSH protection. It publishes three independently placeable bricks as one
+SSH protection. It publishes two independently placeable bricks as one
 atomic release:
 
-| Clan module                         | Role           | Primary package |
-| ----------------------------------- | -------------- | --------------- |
-| `@clanwright/tailscale-admin`       | `admin-access` | Tailscale       |
-| `@clanwright/fail2ban-ssh`          | `ssh-guard`    | Fail2ban        |
-| `@clanwright/fwknop-ssh-breakglass` | `breakglass`   | fwknop          |
+| Clan module                          | Role           | Primary package   |
+| ------------------------------------ | -------------- | ----------------- |
+| `@clanwright/tailscale-admin`        | `admin-access` | Tailscale         |
+| `@clanwright/stunnel-ssh-breakglass` | `breakglass`   | stunnel + OpenSSH |
 
 The runtime flake outputs support `x86_64-linux`; formatting and verification
 tooling is also available on `aarch64-darwin`. A consumer adds Access once, then
@@ -16,8 +15,15 @@ selects each module independently with `module.input = "access"`. Access owns
 the exact application closures; the consumer owns machines, placement, secret
 values, firewall policy, operations, and deployment.
 
-The first planned release is `v0.1.0`. Until it is published, this repository
-is development state and must not be used as a moving deployment input.
+Version `v0.2.0` replaces Fail2ban and fwknop with TLS-PSK-gated
+emergency SSH. Use only a completed signed release, never moving `main`.
+See [migration notes](docs/migration-v0.2.0.md) before updating a consumer.
+
+Daily SSH and admin UIs use Tailscale. The independent emergency service exposes
+TLS 1.3, not raw SSH; it authenticates a PSK before reaching a loopback-only
+OpenSSH daemon. SSH key authentication is a second gate. The recovery account
+has passwordless sudo and therefore root-equivalent authority. Neither channel
+can recover a failed OS, firewall blocking both paths, or lost public routing.
 
 ## Documentation
 
