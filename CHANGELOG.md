@@ -5,6 +5,25 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-06
+
+### Added
+
+- Publish the pinned stock stunnel and OpenSSH packages on `aarch64-darwin` for
+  installation before an incident.
+- Check a secret-free strict recovery SSH client configuration with the pinned
+  OpenSSH parser on both supported systems, and reject a missing stunnel PSK
+  without opening a listener.
+
+### Documentation
+
+- Document the minimal native recovery path: an ordinary foreground stunnel
+  loopback listener plus explicit `ssh -F` and `sftp -F` sessions, with the
+  existing server host public key transferred over a trusted management path.
+- Clarify that Access provides no custom recovery client, wrapper, profile,
+  JSON export, or configuration command and that live Clanwright acceptance
+  remains consumer-owned.
+
 ## [0.3.1] - 2026-09-06
 
 ### Fixed

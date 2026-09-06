@@ -3,7 +3,10 @@
 Access has one root `nixpkgs` input. `clan-core` and flake-parts follow that
 pin, so each Access release identifies one tested package and library closure.
 The public application outputs are `tailscale`, `stunnel`, and `openssh` for
-`x86_64-linux`.
+`x86_64-linux`. The `stunnel` and `openssh` outputs are also published for
+`aarch64-darwin`, using the same root pin, so operators can install the exact
+stock client binaries ahead of an incident. Access does not add a client
+package, wrapper, profile schema, JSON export, or configuration generator.
 
 Tailscale uses the NixOS module supplied by the consumer's nixpkgs, with its
 `package` option forced to the matching Access output. The emergency service

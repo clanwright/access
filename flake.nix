@@ -36,6 +36,13 @@
             ...
           }:
           let
+            clientOutputs = {
+              packages = { inherit (pkgs) stunnel openssh; };
+              checks.recovery-client-config = import ./checks/recovery-client-config.nix {
+                inherit pkgs;
+                readme = ./clanServices/stunnel-ssh-breakglass/README.md;
+              };
+            };
             developmentOutputs = {
               formatter = pkgs.nixfmt;
               devShells.default = pkgs.mkShell {
@@ -79,7 +86,7 @@
               else
                 { };
           in
-          developmentOutputs // runtimeOutputs;
+          lib.recursiveUpdate (developmentOutputs // runtimeOutputs) clientOutputs;
       }
     );
 }
