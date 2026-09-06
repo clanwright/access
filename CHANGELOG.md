@@ -5,6 +5,14 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-06
+
+### Fixed
+
+- Make the break-glass sshd runtime directory group-readable by the configured
+  recovery user while retaining the daemon's root UID, so OpenSSH can read the
+  staged authorized-key file after switching accounts.
+
 ## [0.3.0] - 2026-09-05
 
 ### Breaking

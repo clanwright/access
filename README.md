@@ -16,8 +16,11 @@ the exact application closures; the consumer owns machines, placement, secret
 values, firewall policy, operations, and deployment.
 
 Version `v0.2.0` introduced TLS-PSK-gated emergency SSH in place of Fail2ban and
-fwknop. Version `v0.3.0` restricts the Tailscale `authKeySecretName` setting to safe identifiers; its
-module IDs, roles, defaults, and package closures are unchanged from `v0.2.0`.
+fwknop. Version `v0.3.0` restricts the Tailscale `authKeySecretName` setting to
+safe identifiers; its module IDs, roles, defaults, and package closures are
+unchanged from `v0.2.0`. Version `v0.3.1` fixes recovery sshd access to its
+staged authorized-key file without changing the public API or requiring a new
+migration.
 Use only a completed signed release, never moving `main`. Consumers updating
 from `v0.2.x` should follow the [v0.3.0 migration notes](docs/migration-v0.3.0.md);
 older consumers must first follow the [v0.2.0 migration notes](docs/migration-v0.2.0.md).
