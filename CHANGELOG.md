@@ -5,6 +5,14 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-06
+
+### Changed
+
+- Declare the existing v0.3.3 implementation as the stable v1.0.0 API, without
+  changing runtime behavior, public interfaces, dependencies, or package
+  versions.
+
 ## [0.3.3] - 2026-09-06
 
 ### Changed
