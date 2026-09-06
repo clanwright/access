@@ -36,57 +36,52 @@
             ...
           }:
           let
-            clientOutputs = {
-              packages = { inherit (pkgs) stunnel openssh; };
-              checks.recovery-client-config = import ./checks/recovery-client-config.nix {
+            freshnessReport = import ./packages/freshness-report.nix {
+              inherit pkgs;
+              versions = {
+                tailscale = pkgs.tailscale.version;
+                stunnel = pkgs.stunnel.version;
+                openssh = pkgs.openssh.version;
+              };
+            };
+          in
+          {
+            formatter = pkgs.nixfmt;
+            devShells.default = pkgs.mkShell {
+              packages = [
+                pkgs.actionlint
+                pkgs.gitleaks
+                pkgs.nixfmt
+                pkgs.prettier
+                (pkgs.python3.withPackages (packages: [ packages.pyyaml ]))
+                pkgs.renovate
+              ];
+            };
+            packages = {
+              inherit (pkgs) stunnel openssh;
+            }
+            // lib.optionalAttrs (system == "x86_64-linux") {
+              inherit (pkgs) tailscale;
+              freshness-report = freshnessReport;
+            };
+            checks = {
+              recovery-client-config = import ./checks/recovery-client-config.nix {
                 inherit pkgs;
                 readme = ./clanServices/stunnel-ssh-breakglass/README.md;
               };
-            };
-            developmentOutputs = {
-              formatter = pkgs.nixfmt;
-              devShells.default = pkgs.mkShell {
-                packages = [
-                  pkgs.actionlint
-                  pkgs.gitleaks
-                  pkgs.nixfmt
-                  pkgs.prettier
-                  (pkgs.python3.withPackages (packages: [ packages.pyyaml ]))
-                  pkgs.renovate
-                ];
-              };
-            };
-            runtimeOutputs =
-              if system == "x86_64-linux" then
-                let
-                  freshnessReport = import ./packages/freshness-report.nix {
-                    inherit pkgs;
-                    versions = {
-                      tailscale = pkgs.tailscale.version;
-                      stunnel = pkgs.stunnel.version;
-                      openssh = pkgs.openssh.version;
-                    };
-                  };
-                in
-                {
-                  packages = {
-                    inherit (pkgs) tailscale stunnel openssh;
-                    freshness-report = freshnessReport;
-                  };
-                  checks = import ./checks {
-                    inherit
-                      inputs
-                      pkgs
-                      self
-                      system
-                      ;
-                    root = ./.;
-                  };
-                }
-              else
-                { };
-          in
-          lib.recursiveUpdate (developmentOutputs // runtimeOutputs) clientOutputs;
+            }
+            // lib.optionalAttrs (system == "x86_64-linux") (
+              import ./checks {
+                inherit
+                  inputs
+                  pkgs
+                  self
+                  system
+                  ;
+                root = ./.;
+              }
+            );
+          };
       }
     );
 }

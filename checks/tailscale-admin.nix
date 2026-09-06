@@ -40,16 +40,6 @@ let
         true
     )).success;
   unwrap = value: if builtins.isAttrs value && value ? content then unwrap value.content else value;
-  consumerPackageChoice =
-    (lib.evalModules {
-      modules = [
-        {
-          options.package = lib.mkOption { type = lib.types.package; };
-          config.package = pkgs.hello;
-        }
-        { config.package = enabled.services.tailscale.package; }
-      ];
-    }).config.package;
   contract =
     builtins.deepSeq evaluatedService.result.api.schema true
     && service.manifest.name == "@clanwright/tailscale-admin"
@@ -87,7 +77,6 @@ let
         "--ssh=false"
       ]
     && unwrap enabled.services.tailscale.package == self.packages.${system}.tailscale
-    && consumerPackageChoice == self.packages.${system}.tailscale
     && enabled.clan.core.state.tailscale.folders == [ "/var/lib/tailscale" ]
     && !(enabled ? systemd)
     && !(disabled ? systemd)

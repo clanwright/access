@@ -6,13 +6,6 @@
   system,
 }:
 let
-  reportSource = root + "/packages/freshness-report.nix";
-  fixtureDirectory = root + "/checks/fixtures/freshness";
-  packageNames = [
-    "openssh"
-    "stunnel"
-    "tailscale"
-  ];
   productionVersions = {
     tailscale = self.packages.${system}.tailscale.version;
     openssh = self.packages.${system}.openssh.version;
@@ -23,62 +16,26 @@ let
     openssh = "9.8p1";
     stunnel = "5.70";
   };
-  fixture = name: builtins.fromJSON (builtins.readFile (fixtureDirectory + "/${name}.json"));
-  fixtures = {
-    current = fixture "current";
-    lag = fixture "lag";
-    unknown = fixture "unknown";
-  };
-  validEntry =
-    name: entry:
-    builtins.attrNames entry == [
-      "actual"
-      "latestObserved"
-      "state"
-    ]
-    && entry.actual == testVersions.${name}
-    && builtins.elem entry.state [
-      "current"
-      "lag"
-      "unknown"
-    ]
-    && (
-      if entry.state == "unknown" then
-        entry.latestObserved == null
-      else
-        builtins.isString entry.latestObserved
-    );
-  validReport =
-    report:
-    builtins.attrNames report == [
-      "observedAt"
-      "packages"
-    ]
-    && builtins.match "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z" report.observedAt != null
-    && builtins.attrNames report.packages == packageNames
-    && builtins.all (name: validEntry name report.packages.${name}) packageNames;
-  currentContract = builtins.all (
-    entry: entry.state == "current" && entry.actual == entry.latestObserved
-  ) (builtins.attrValues fixtures.current.packages);
-  lagContract = builtins.any (entry: entry.state == "lag" && entry.actual != entry.latestObserved) (
-    builtins.attrValues fixtures.lag.packages
-  );
-  unknownContract = builtins.any (entry: entry.state == "unknown" && entry.latestObserved == null) (
-    builtins.attrValues fixtures.unknown.packages
-  );
-  source = builtins.readFile reportSource;
-  clientContract = builtins.all (needle: lib.hasInfix needle source) [
-    "tailscale/tailscale/releases/latest"
-    "stunnel.org/versions.html"
-    "cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/"
-    "--connect-timeout 5"
-    "--max-time 10"
-    "--retry 0"
-  ];
   mockCurl = pkgs.writeShellScriptBin "curl" ''
     set -eu
 
     url="''${!#}"
+    args="$(printf '<%s>' "$@")"
+    common='<--fail><--silent><--show-error><--location><--connect-timeout><5><--max-time><10><--retry><0>'
+    user_agent='<--header><User-Agent: clanwright-access-freshness>'
+    case "$url" in
+      https://api.github.com/repos/tailscale/tailscale/releases/latest)
+        expected="$common<--header><Accept: application/vnd.github+json>$user_agent<$url>" ;;
+      https://www.stunnel.org/versions.html|https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
+        expected="$common$user_agent<$url>" ;;
+      *)
+        echo "unexpected freshness endpoint: $url" >&2
+        exit 64 ;;
+    esac
+    if [ "$args" != "$expected" ]; then
+      echo "unexpected curl arguments for $url" >&2
+      exit 65
+    fi
     if [ -n "''${FRESHNESS_CURL_LOG:-}" ]; then
       printf '%s\n' "$url" >> "$FRESHNESS_CURL_LOG"
     fi
@@ -96,6 +53,18 @@ let
         printf '%s\n' 'Version 5.9 released' 'Version 5.70 released' 'Version 5.71 released' 'Version 99.99 available' ;;
       lag:https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
         printf '%s\n' 'openssh-9.7p1.tar.gz' 'openssh-9.8p1.tar.gz' 'openssh-9.9p1.tar.gz' ;;
+      ahead:https://api.github.com/repos/tailscale/tailscale/releases/latest)
+        printf '%s' '{"tag_name":"v1.2.2","draft":false,"prerelease":false}' ;;
+      ahead:https://www.stunnel.org/versions.html)
+        printf '%s\n' 'Version 5.69 released' ;;
+      ahead:https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
+        printf '%s\n' 'openssh-9.7p1.tar.gz' ;;
+      prerelease:https://api.github.com/repos/tailscale/tailscale/releases/latest)
+        printf '%s' '{"tag_name":"v1.2.4","draft":false,"prerelease":true}' ;;
+      prerelease:https://www.stunnel.org/versions.html)
+        printf '%s\n' 'Version ${testVersions.stunnel} released' ;;
+      prerelease:https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
+        printf '%s\n' 'openssh-${testVersions.openssh}.tar.gz' ;;
       unknown:*) exit 22 ;;
       malformed-json:https://api.github.com/repos/tailscale/tailscale/releases/latest)
         printf '%s' '{"tag_name":' ;;
@@ -114,93 +83,119 @@ let
         exit 64 ;;
     esac
   '';
-  reportUnderTest = import reportSource {
+  reportUnderTest = import ../packages/freshness-report.nix {
     pkgs = pkgs // {
       curl = mockCurl;
     };
     versions = testVersions;
   };
 in
-if !(builtins.pathExists reportSource) || !(builtins.pathExists fixtureDirectory) then
-  throw "freshness metadata missing"
-else if
-  !(builtins.all validReport (builtins.attrValues fixtures))
-  || !currentContract
-  || !lagContract
-  || !unknownContract
-  || !clientContract
-then
-  throw "freshness metadata changed"
-else
-  pkgs.runCommand "access-freshness-contract"
-    {
-      nativeBuildInputs = [
-        pkgs.jq
-        reportUnderTest
-      ];
+pkgs.runCommand "access-freshness-contract"
+  {
+    nativeBuildInputs = [
+      pkgs.jq
+      reportUnderTest
+    ];
+  }
+  ''
+    production_report=${self.packages.${system}.freshness-report}/bin/access-freshness-report
+    test -x "$production_report"
+    grep -qF 'probe tailscale ${productionVersions.tailscale} https://api.github.com/repos/tailscale/tailscale/releases/latest' "$production_report"
+    grep -qF 'probe stunnel ${productionVersions.stunnel} https://www.stunnel.org/versions.html' "$production_report"
+    grep -qF 'probe openssh ${productionVersions.openssh} https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/' "$production_report"
+    run_report() {
+      fixture="$1"
+      result="$TMPDIR/$fixture/report.json"
+      mkdir -p "$(dirname "$result")"
+      FRESHNESS_FIXTURE="$fixture" FRESHNESS_CURL_LOG="$TMPDIR/$fixture/curl.log" \
+        ${reportUnderTest}/bin/access-freshness-report --output "$result"
+      assert_all_endpoints "$TMPDIR/$fixture/curl.log"
+      assert_report_contract "$result"
     }
-    ''
-      production_report=${self.packages.${system}.freshness-report}/bin/access-freshness-report
-      test -x "$production_report"
-      grep -qF 'probe tailscale ${productionVersions.tailscale} https://api.github.com/repos/tailscale/tailscale/releases/latest' "$production_report"
-      grep -qF 'probe_text stunnel ${productionVersions.stunnel} https://www.stunnel.org/versions.html' "$production_report"
-      grep -qF 'probe_text openssh ${productionVersions.openssh} https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/' "$production_report"
-      if printf '%s\n' '{"packages":}' | jq -e . >/dev/null 2>&1; then
-        echo "malformed freshness metadata was accepted" >&2
-        exit 1
-      fi
 
-      run_report() {
-        fixture="$1"
-        result="$TMPDIR/$fixture/report.json"
-        mkdir -p "$(dirname "$result")"
-        FRESHNESS_FIXTURE="$fixture" FRESHNESS_CURL_LOG="$TMPDIR/$fixture/curl.log" \
-          ${reportUnderTest}/bin/access-freshness-report --output "$result"
-      }
+    assert_all_endpoints() {
+      log="$1"
+      test "$(wc -l < "$log")" -eq 3
+      grep -qxF 'https://api.github.com/repos/tailscale/tailscale/releases/latest' "$log"
+      grep -qxF 'https://www.stunnel.org/versions.html' "$log"
+      grep -qxF 'https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/' "$log"
+    }
 
-      assert_all_endpoints() {
-        log="$1"
-        test "$(wc -l < "$log")" -eq 3
-        grep -qxF 'https://api.github.com/repos/tailscale/tailscale/releases/latest' "$log"
-        grep -qxF 'https://www.stunnel.org/versions.html' "$log"
-        grep -qxF 'https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/' "$log"
-      }
-
-      run_report current
-      assert_all_endpoints "$TMPDIR/current/curl.log"
+    assert_report_contract() {
+      report="$1"
       jq -e \
         --arg tailscale '${testVersions.tailscale}' \
         --arg stunnel '${testVersions.stunnel}' \
         --arg openssh '${testVersions.openssh}' '
-          .packages == {
-            tailscale: {actual: $tailscale, latestObserved: $tailscale, state: "current"},
-            stunnel: {actual: $stunnel, latestObserved: $stunnel, state: "current"},
-            openssh: {actual: $openssh, latestObserved: $openssh, state: "current"}
-          }
-        ' "$TMPDIR/current/report.json" >/dev/null
+          (keys == ["observedAt", "packages"])
+          and (.observedAt | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+          and (.packages | keys == ["openssh", "stunnel", "tailscale"])
+          and (.packages.tailscale.actual == $tailscale)
+          and (.packages.stunnel.actual == $stunnel)
+          and (.packages.openssh.actual == $openssh)
+          and ([.packages[] |
+            (keys == ["actual", "latestObserved", "state"])
+            and (.actual | type == "string")
+            and (.state == "current" or .state == "lag" or .state == "unknown")
+            and (if .state == "unknown"
+                 then .latestObserved == null
+                 else (.latestObserved | type == "string")
+                 end)
+          ] | all)
+        ' "$report" >/dev/null
+    }
 
-      run_report lag
-      assert_all_endpoints "$TMPDIR/lag/curl.log"
-      jq -e '
-        .packages.tailscale == {actual: "${testVersions.tailscale}", latestObserved: "1.2.4", state: "lag"}
-        and .packages.stunnel == {actual: "${testVersions.stunnel}", latestObserved: "5.71", state: "lag"}
-        and .packages.openssh == {actual: "${testVersions.openssh}", latestObserved: "9.9p1", state: "lag"}
-      ' "$TMPDIR/lag/report.json" >/dev/null
+    run_report current
+    jq -e \
+      --arg tailscale '${testVersions.tailscale}' \
+      --arg stunnel '${testVersions.stunnel}' \
+      --arg openssh '${testVersions.openssh}' '
+        .packages == {
+          tailscale: {actual: $tailscale, latestObserved: $tailscale, state: "current"},
+          stunnel: {actual: $stunnel, latestObserved: $stunnel, state: "current"},
+          openssh: {actual: $openssh, latestObserved: $openssh, state: "current"}
+        }
+      ' "$TMPDIR/current/report.json" >/dev/null
 
-      run_report unknown
-      assert_all_endpoints "$TMPDIR/unknown/curl.log"
-      jq -e '[.packages[] | .state == "unknown" and .latestObserved == null] | all' \
-        "$TMPDIR/unknown/report.json" >/dev/null
+    run_report lag
+    jq -e '
+      .packages.tailscale == {actual: "${testVersions.tailscale}", latestObserved: "1.2.4", state: "lag"}
+      and .packages.stunnel == {actual: "${testVersions.stunnel}", latestObserved: "5.71", state: "lag"}
+      and .packages.openssh == {actual: "${testVersions.openssh}", latestObserved: "9.9p1", state: "lag"}
+    ' "$TMPDIR/lag/report.json" >/dev/null
 
-      for fixture in malformed-json malformed-stunnel malformed-openssh; do
-        result="$TMPDIR/$fixture/report.json"
-        mkdir -p "$(dirname "$result")"
-        if FRESHNESS_FIXTURE="$fixture" FRESHNESS_CURL_LOG="$TMPDIR/$fixture/curl.log" \
-          ${reportUnderTest}/bin/access-freshness-report --output "$result"; then
-          echo "malformed $fixture upstream response was accepted" >&2
-          exit 1
-        fi
-        test ! -e "$result"
-      done
-      touch "$out"
-    ''
+    run_report unknown
+    jq -e '[.packages[] | .state == "unknown" and .latestObserved == null] | all' \
+      "$TMPDIR/unknown/report.json" >/dev/null
+
+    run_report ahead
+    jq -e '[.packages[] | .state == "current" and (.latestObserved != .actual)] | all' \
+      "$TMPDIR/ahead/report.json" >/dev/null
+
+    run_report prerelease
+    jq -e '
+      .packages.tailscale == {actual: "${testVersions.tailscale}", latestObserved: null, state: "unknown"}
+      and .packages.stunnel.state == "current"
+      and .packages.openssh.state == "current"
+    ' "$TMPDIR/prerelease/report.json" >/dev/null
+
+    for fixture in malformed-json malformed-stunnel malformed-openssh; do
+      result="$TMPDIR/$fixture/report.json"
+      mkdir -p "$(dirname "$result")"
+      set +e
+      FRESHNESS_FIXTURE="$fixture" FRESHNESS_CURL_LOG="$TMPDIR/$fixture/curl.log" \
+        ${reportUnderTest}/bin/access-freshness-report --output "$result" \
+        2>"$TMPDIR/$fixture/stderr.log"
+      status="$?"
+      set -e
+      test "$status" -eq 1
+      grep -qF 'malformed release metadata' "$TMPDIR/$fixture/stderr.log"
+      test ! -e "$result"
+    done
+
+    test "$(wc -l < "$TMPDIR/malformed-json/curl.log")" -eq 1
+    test "$(wc -l < "$TMPDIR/malformed-stunnel/curl.log")" -eq 2
+    test "$(wc -l < "$TMPDIR/malformed-openssh/curl.log")" -eq 3
+
+    touch "$out"
+  ''
