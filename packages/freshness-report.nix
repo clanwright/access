@@ -53,62 +53,42 @@ pkgs.writeShellApplication {
       name="$1"
       actual="$2"
       url="$3"
-
+      headers=()
+      if [ "$name" = tailscale ]; then
+        headers=(--header 'Accept: application/vnd.github+json')
+      fi
       if ! response="$(curl --fail --silent --show-error --location \
         --connect-timeout 5 --max-time 10 --retry 0 \
-        --header 'Accept: application/vnd.github+json' \
-        --header 'User-Agent: clanwright-access-freshness' \
-        "$url" 2>/dev/null)"; then
-        update_report "$name" "$actual" unknown __NULL__
-        return
-      fi
-
-      if ! printf '%s' "$response" | jq -e \
-        'type == "object" and (.tag_name | type == "string") and (.draft | type == "boolean") and (.prerelease | type == "boolean")' \
-        >/dev/null; then
-        echo "malformed release metadata for $name" >&2
-        exit 1
-      fi
-
-      if [ "$(printf '%s' "$response" | jq -r '.draft or .prerelease')" = "true" ]; then
-        update_report "$name" "$actual" unknown __NULL__
-        return
-      fi
-
-      tag="$(printf '%s' "$response" | jq -r '.tag_name')"
-      latest="''${tag#v}"
-      if ! printf '%s' "$latest" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
-        echo "malformed release metadata for $name" >&2
-        exit 1
-      fi
-
-      newest="$(printf '%s\n%s\n' "$actual" "$latest" | sort -V | tail -n 1)"
-      if [ "$actual" = "$latest" ] || [ "$newest" = "$actual" ]; then
-        state=current
-      else
-        state=lag
-      fi
-      update_report "$name" "$actual" "$state" "$latest"
-    }
-
-    probe tailscale ${versions.tailscale} https://api.github.com/repos/tailscale/tailscale/releases/latest
-    probe_text() {
-      name="$1"
-      actual="$2"
-      url="$3"
-      if ! response="$(curl --fail --silent --show-error --location \
-        --connect-timeout 5 --max-time 10 --retry 0 \
-        --header 'User-Agent: clanwright-access-freshness' "$url" 2>/dev/null)"; then
+        "''${headers[@]}" --header 'User-Agent: clanwright-access-freshness' "$url" 2>/dev/null)"; then
         update_report "$name" "$actual" unknown __NULL__
         return
       fi
       case "$name" in
+        tailscale)
+          if ! printf '%s' "$response" | jq -e \
+            'type == "object" and (.tag_name | type == "string") and (.draft | type == "boolean") and (.prerelease | type == "boolean")' \
+            >/dev/null; then
+            echo "malformed release metadata for $name" >&2
+            exit 1
+          fi
+          if [ "$(printf '%s' "$response" | jq -r '.draft or .prerelease')" = "true" ]; then
+            update_report "$name" "$actual" unknown __NULL__
+            return
+          fi
+          tag="$(printf '%s' "$response" | jq -r '.tag_name')"
+          latest="''${tag#v}"
+          if ! printf '%s' "$latest" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            latest=""
+          fi
+          ;;
         stunnel)
           latest="$(printf '%s' "$response" | { grep -oE 'Version [0-9]+\.[0-9]+ released' || true; } |
-            sed -E 's/^Version //; s/ released$//' | sort -Vu | tail -n 1)" ;;
+            sed -E 's/^Version //; s/ released$//' | sort -Vu | tail -n 1)"
+          ;;
         openssh)
           latest="$(printf '%s' "$response" | { grep -oE 'openssh-[0-9]+\.[0-9]+p[0-9]+\.tar\.gz' || true; } |
-            sed -E 's/^openssh-//; s/\.tar\.gz$//' | sort -Vu | tail -n 1)" ;;
+            sed -E 's/^openssh-//; s/\.tar\.gz$//' | sort -Vu | tail -n 1)"
+          ;;
         *) exit 2 ;;
       esac
       if [ -z "$latest" ]; then
@@ -120,8 +100,9 @@ pkgs.writeShellApplication {
       update_report "$name" "$actual" "$state" "$latest"
     }
 
-    probe_text stunnel ${versions.stunnel} https://www.stunnel.org/versions.html
-    probe_text openssh ${versions.openssh} https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/
+    probe tailscale ${versions.tailscale} https://api.github.com/repos/tailscale/tailscale/releases/latest
+    probe stunnel ${versions.stunnel} https://www.stunnel.org/versions.html
+    probe openssh ${versions.openssh} https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/
 
     if ! jq -e '
       (.observedAt | type == "string") and

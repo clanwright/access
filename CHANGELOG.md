@@ -5,6 +5,21 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-06
+
+### Changed
+
+- Simplify shared freshness request and version handling, flake outputs, and
+  Tailscale flag definitions without changing public APIs, runtime defaults,
+  or application packages.
+
+### Verification
+
+- Replace duplicate static freshness fixtures with schema and behavior checks
+  against actual report output, including ahead and prerelease cases.
+- Remove a redundant Tailscale package-precedence check while retaining the
+  dedicated package-authority contract.
+
 ## [0.3.2] - 2026-09-06
 
 ### Added

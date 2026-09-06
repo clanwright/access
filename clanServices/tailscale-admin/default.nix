@@ -60,6 +60,12 @@
             pkgs,
             ...
           }:
+          let
+            extraFlags = [
+              "--accept-dns=${lib.boolToString settings.acceptDns}"
+              "--ssh=false"
+            ];
+          in
           {
             sops.secrets."${settings.authKeySecretName}" = {
               owner = "root";
@@ -74,14 +80,8 @@
               enable = enabled;
               package = lib.mkForce self.packages.${pkgs.stdenv.hostPlatform.system}.tailscale;
               authKeyFile = config.sops.secrets."${settings.authKeySecretName}".path;
-              extraUpFlags = [
-                "--accept-dns=${lib.boolToString settings.acceptDns}"
-                "--ssh=false"
-              ];
-              extraSetFlags = [
-                "--accept-dns=${lib.boolToString settings.acceptDns}"
-                "--ssh=false"
-              ];
+              extraUpFlags = extraFlags;
+              extraSetFlags = extraFlags;
             };
           };
       };
