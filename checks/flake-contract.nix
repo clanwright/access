@@ -37,8 +37,12 @@ let
     self.devShells ? aarch64-darwin
     && self.devShells.aarch64-darwin ? default
     && self.formatter ? aarch64-darwin
-    && builtins.attrNames (self.packages.aarch64-darwin or { }) == [ ]
-    && builtins.attrNames (self.checks.aarch64-darwin or { }) == [ ];
+    &&
+      builtins.attrNames (self.packages.aarch64-darwin or { }) == [
+        "openssh"
+        "stunnel"
+      ]
+    && builtins.attrNames (self.checks.aarch64-darwin or { }) == [ "recovery-client-config" ];
   closedConsumerSurface =
     builtins.attrNames (self.overlays or { }) == [ ]
     && builtins.attrNames (self.nixosModules or { }) == [ ];

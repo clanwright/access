@@ -112,49 +112,147 @@ network failure. Before changing the recovery stack from a break-glass shell,
 start any critical repair in a detached root-owned process and retain another
 recovery route.
 
-## Client and consumer prerequisites
+## Native recovery client
 
-Keep a client configuration only in the consumer-owned recovery kit. This
-secret-free template shows the required shape; angle-bracket tokens are
-operator-supplied metadata or runtime paths, not values to commit:
+The minimal client is the unmodified stunnel and OpenSSH software from Access's
+pinned package set. No Access-specific client package, wrapper, profile format,
+JSON file, or export command is required.
+
+Prepare the recovery kit while the server and its normal management path are
+healthy. Starting with `v0.3.2`, both supported client platforms have native
+package outputs. First verify the release's signed tag through the process in
+[Releases](../../docs/releases.md), then install by that exact tag. The profile
+command does not itself verify a Git signature.
+
+```sh
+nix profile add --profile "$HOME/.local/state/nix/profiles/access-recovery" \
+  "github:clanwright/access/<RELEASE_TAG>#stunnel" \
+  "github:clanwright/access/<RELEASE_TAG>#openssh"
+```
+
+Replace `<RELEASE_TAG>` with the exact signed release tag before running the
+command; the angle-bracket form is documentation syntax only.
+
+The profile keeps both closures as garbage-collection roots. Complete this
+installation before an incident: recovery must use the installed binaries and
+must not depend on `nix run`, flake evaluation, downloads, Tailscale, or DNS.
+
+Keep the stunnel configuration, SSH configuration, PSK file, recovery private
+key, and dedicated known-hosts file at stable recorded paths in the
+operator-owned recovery kit. Do not store their contents in this repository.
+Use one stable host-key alias for each server so its emergency identity cannot
+be confused with its ordinary sshd identity. Prefer simple absolute kit paths;
+the quoted SSH path placeholders also permit spaces. Keep the PSK and SSH
+private-key files private to the operator with mode `0600`.
+
+After the server has booted and generated its independent host key, retrieve
+the existing public key file
+`/var/lib/stunnel-ssh-breakglass/ssh_host_ed25519_key.pub` over an already
+trusted management channel. Reading it requires root because its directory is
+mode `0700`. Never generate or replace the server host key during client
+preparation. Record its fingerprint before constructing the known-hosts entry
+for the stable alias from the trusted public key:
+
+```sh
+ssh-keygen -l -E sha256 -f "<RECOVERY_SERVER_HOST_PUBLIC_KEY_FILE>"
+```
+
+The dedicated known-hosts line has this shape, using metadata copied from that
+trusted `.pub` file:
+
+```text
+<HOST_KEY_ALIAS> ssh-ed25519 <PUBLIC_KEY_BASE64>
+```
+
+The public key exists after the server's first successful boot. Do not
+establish trust with `ssh-keyscan` or accept a key interactively during an
+incident.
+
+The stunnel file uses an ordinary IPv4 loopback listener. Angle-bracket tokens
+below are operator-supplied metadata or runtime paths, not example values:
 
 ```ini
 foreground = yes
 client = yes
+syslog = no
+pid =
 
 [recovery]
-accept = 127.0.0.1:<LOCAL_FORWARD_PORT>
+accept = 127.0.0.1:14791
 connect = <PUBLIC_IPV4>:<TLS_PORT>
 PSKidentity = <PSK_IDENTITY>
-PSKsecrets = <LOCAL_RUNTIME_PSK_FILE>
 sslVersionMin = TLSv1.3
 sslVersionMax = TLSv1.3
+sessionResume = no
+PSKsecrets = <PSK_FILE>
 ```
 
-Then point SSH or SFTP at the local forwarded endpoint. The SSH host entry
-must pin the independently generated emergency host key rather than accepting
-the normal sshd key:
+Use a separate SSH configuration file. The stable alias pins the emergency
+host key and prevents fallback to global host keys, agents, certificate files,
+password authentication, forwarding, proxies, or multiplexing:
 
 ```sshconfig
-Host access-recovery-<SERVER>
+Host recovery
   HostName 127.0.0.1
-  Port <LOCAL_FORWARD_PORT>
-  User access-recovery
-  HostKeyAlias <SERVER>-stunnel-ssh-breakglass
+  Port 14791
+  User <RECOVERY_USER>
+  HostKeyAlias <HOST_KEY_ALIAS>
   StrictHostKeyChecking yes
-  UserKnownHostsFile <CONSUMER_RECOVERY_KIT_KNOWN_HOSTS>
+  UserKnownHostsFile "<KNOWN_HOSTS_FILE>"
+  GlobalKnownHostsFile /dev/null
+  UpdateHostKeys no
+  VerifyHostKeyDNS no
+  KnownHostsCommand none
+  IdentityAgent none
   IdentitiesOnly yes
-  IdentityFile <CONSUMER_RECOVERY_PRIVATE_KEY>
+  IdentityFile "<SSH_PRIVATE_KEY_FILE>"
+  CertificateFile none
+  PubkeyAuthentication yes
+  PreferredAuthentications publickey
+  PasswordAuthentication no
+  KbdInteractiveAuthentication no
+  HostbasedAuthentication no
+  ForwardAgent no
+  ForwardX11 no
+  ClearAllForwardings yes
+  ProxyCommand none
+  ProxyJump none
+  ControlMaster no
+  ControlPath none
+  ControlPersist no
 ```
 
-Direct SSH to the public address and `sshPort` is intentionally unavailable.
+During an incident, start the installed stunnel in one terminal and leave it in
+the foreground. In a second terminal, select the dedicated SSH configuration
+explicitly and run either SSH or SFTP:
 
-Before treating a consumer deployment as usable, its owner should verify the
-public firewall exposes only `tlsPort`, the expected TLS 1.3 PSK reaches SSH,
-an incorrect or removed PSK fails, direct public SSH fails, SFTP and a terminal
-work, forwarding is rejected, and the generated emergency host-key fingerprint
-matches the out-of-band record. These are consumer runtime checks, not actions
-performed by Access.
+```sh
+"$HOME/.local/state/nix/profiles/access-recovery/bin/stunnel" \
+  "<RECOVERY_STUNNEL_CONFIG_FILE>"
+"$HOME/.local/state/nix/profiles/access-recovery/bin/ssh" \
+  -F "<RECOVERY_SSH_CONFIG_FILE>" recovery
+"$HOME/.local/state/nix/profiles/access-recovery/bin/sftp" \
+  -S "$HOME/.local/state/nix/profiles/access-recovery/bin/ssh" \
+  -F "<RECOVERY_SSH_CONFIG_FILE>" recovery
+```
+
+One local stunnel listener supports multiple SSH and SFTP sessions; open more
+terminals only for concurrent sessions. Allocate a distinct local port and
+matching SSH configuration for each target when several servers must be reached
+simultaneously. Stop the foreground stunnel with Ctrl+C after all sessions
+finish. Direct SSH to the public address and `sshPort` is intentionally
+unavailable.
+
+This path assumes that the server OS, public routing, stunnel service, and
+consumer firewall are healthy. It is intended for a Tailscale outage and does
+not replace physical-console recovery.
+
+Before treating a consumer deployment as usable, its owner should verify in
+Clanwright that the public firewall exposes only `tlsPort`; the expected PSK
+and SSH key permit a terminal login, passwordless sudo, and SFTP; and wrong SSH
+keys, wrong or missing PSKs, and missing or changed host keys all fail. Direct
+public SSH and forwarding must also fail. None of this runtime acceptance is
+demonstrated by this repository's secret-free checks.
 
 ## Verification
 

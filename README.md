@@ -9,18 +9,21 @@ atomic release:
 | `@clanwright/tailscale-admin`        | `admin-access` | Tailscale         |
 | `@clanwright/stunnel-ssh-breakglass` | `breakglass`   | stunnel + OpenSSH |
 
-The runtime flake outputs support `x86_64-linux`; formatting and verification
-tooling is also available on `aarch64-darwin`. A consumer adds Access once, then
-selects each module independently with `module.input = "access"`. Access owns
-the exact application closures; the consumer owns machines, placement, secret
-values, firewall policy, operations, and deployment.
+The authoritative `tailscale`, `stunnel`, and `openssh` package outputs support
+`x86_64-linux`. The `stunnel` and `openssh` outputs are also available on
+`aarch64-darwin` for a stock-binary recovery client; formatting and verification
+tooling supports both systems. A consumer adds Access once, then selects each
+module independently with `module.input = "access"`. Access owns the exact
+application closures; the consumer owns machines, placement, secret values,
+firewall policy, operations, and deployment.
 
 Version `v0.2.0` introduced TLS-PSK-gated emergency SSH in place of Fail2ban and
 fwknop. Version `v0.3.0` restricts the Tailscale `authKeySecretName` setting to
 safe identifiers; its module IDs, roles, defaults, and package closures are
 unchanged from `v0.2.0`. Version `v0.3.1` fixes recovery sshd access to its
 staged authorized-key file without changing the public API or requiring a new
-migration.
+migration. Version `v0.3.2` adds native macOS recovery tools and documents the
+standard stunnel/OpenSSH client path without changing server settings.
 Use only a completed signed release, never moving `main`. Consumers updating
 from `v0.2.x` should follow the [v0.3.0 migration notes](docs/migration-v0.3.0.md);
 older consumers must first follow the [v0.2.0 migration notes](docs/migration-v0.2.0.md).
@@ -35,6 +38,8 @@ can recover a failed OS, firewall blocking both paths, or lost public routing.
 
 - Each module's public settings and defaults live beside its implementation in
   [`clanServices/`](clanServices/).
+- The [break-glass module guide](clanServices/stunnel-ssh-breakglass/README.md)
+  includes the minimal native macOS recovery preparation and incident runbook.
 - [Package authority](docs/package-authority.md) explains the single nixpkgs
   context and the consumer-module boundary.
 - [Verification](docs/verification.md) lists the complete local gate.

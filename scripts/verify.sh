@@ -60,7 +60,13 @@ secret_scan() {
 }
 
 flake_checks() {
-  nix flake check --all-systems --no-write-lock-file \
+  # Materialize derivation metadata before flake check's read-only --no-build
+  # evaluation. This builds no outputs and needs no cross-platform builder.
+  nix eval --json --no-write-lock-file \
+    --option allow-import-from-derivation false .#checks \
+    --apply 'builtins.mapAttrs (_: checks: builtins.mapAttrs (_: check: check.drvPath) checks)' \
+    > "$verify_log_dir/check-derivations.json"
+  nix flake check --all-systems --no-build --no-write-lock-file \
     --option allow-import-from-derivation false
 }
 
@@ -94,5 +100,9 @@ run_stage formatting formatting
 run_stage static static_checks
 run_stage secret-scan secret_scan
 run_stage flake-check flake_checks
+run_stage native-recovery nix build --no-write-lock-file --no-link \
+  --option allow-import-from-derivation false \
+  .#stunnel .#openssh \
+  .#checks."$(nix eval --impure --raw --expr builtins.currentSystem)".recovery-client-config
 run_stage packages packages
 run_stage linux-checks linux_checks
