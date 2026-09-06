@@ -138,6 +138,7 @@ in
         ExecStart = "${accessOpenSSH}/bin/sshd -D -e -f ${rendered.sshdConfig}";
         RuntimeDirectory = sshdServiceName;
         RuntimeDirectoryMode = "0750";
+        Group = settings.recoveryUser;
         LoadCredential = [ "authorized-keys:${authorizedKeysSecretPath}" ];
         UMask = "0077";
         KillMode = "process";

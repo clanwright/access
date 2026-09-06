@@ -44,9 +44,11 @@ The role declares exactly two runtime SOPS secrets. Both source files are
   the generated stunnel configuration.
 - The authorized-public-keys source is loaded as a credential for the recovery
   sshd. At daemon start, a root process stages a runtime-only `root:recovery`
-  mode `0440` copy. OpenSSH reads authorized keys after switching to the target
-  account, so that group-readable public-key file is necessary; the original
-  SOPS source stays root-only.
+  mode `0440` copy in a `root:recovery` mode `0750` runtime directory. The sshd
+  keeps its root UID while systemd assigns its primary group to the configured
+  recovery account. OpenSSH reads authorized keys after switching to the target
+  account, so both group-readable paths are necessary; the original SOPS source
+  stays root-only.
 
 The PSK file is a content contract owned by the consumer: one identity record
 whose key is exactly 64 lowercase hexadecimal characters representing 32

@@ -69,9 +69,12 @@ let
     };
 
   evaluatedNixos = nixosFor defaults;
+  customRecoveryUser = "custom-recovery";
+  customRecoveryNixos = nixosFor (defaults // { recoveryUser = customRecoveryUser; });
   config = evaluatedNixos.config;
   stunnelUnit = config.systemd.services.${serviceName};
   sshdUnit = config.systemd.services.${sshdServiceName};
+  customRecoverySshdUnit = customRecoveryNixos.config.systemd.services.${sshdServiceName};
   hostKeyUnit = config.systemd.services.${hostKeyServiceName};
   accessStunnel = self.packages.${system}.stunnel;
   accessOpenSSH = self.packages.${system}.openssh;
@@ -242,6 +245,12 @@ let
     )
     && sshdUnit.serviceConfig.RuntimeDirectory == sshdServiceName
     && sshdUnit.serviceConfig.RuntimeDirectoryMode == "0750"
+    && sshdUnit.serviceConfig.Group == defaults.recoveryUser
+    && !(sshdUnit.serviceConfig ? User)
+    && customRecoverySshdUnit.serviceConfig.RuntimeDirectory == sshdServiceName
+    && customRecoverySshdUnit.serviceConfig.RuntimeDirectoryMode == "0750"
+    && customRecoverySshdUnit.serviceConfig.Group == customRecoveryUser
+    && !(customRecoverySshdUnit.serviceConfig ? User)
     &&
       sshdUnit.serviceConfig.LoadCredential == [
         "authorized-keys:/run/secrets/${defaults.authorizedKeysSecretName}"
