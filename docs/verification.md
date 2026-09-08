@@ -46,9 +46,11 @@ assertions and per-machine setting overrides. The fixture uses Access's pinned
 baseline; it does not establish compatibility with arbitrary consumer pins
 or replace building the consumer's real machine closure.
 
-Access does not use NixOS VM, QEMU, or KVM tests locally or in CI. Its accepted
-verification layers are evaluation, schema and assertion checks, generated
-configuration parsing, and package builds.
+Access does not provision or run project-managed VMs for development, builds,
+or tests, locally or in CI, including NixOS VM, QEMU, or KVM tests. External
+Linux builders and hosted CI infrastructure remain outside Access machine
+ownership. Its accepted verification layers are evaluation, schema and
+assertion checks, generated-configuration parsing, and package builds.
 
 Materialize check derivation metadata first, then run the native check with
 remote builders disabled and evaluate every system without building it. The
