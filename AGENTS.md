@@ -22,8 +22,9 @@ the reusable Clan service recipes that configure them.
 - Use native Clan `clan.modules` exports and consumer-native NixOS modules.
 - Run focused checks after every change and `nix flake check
 --no-write-lock-file` before review.
-- Do not provision or run virtual machines for Access development, builds, or
-  tests, locally or in CI; this includes NixOS VM, QEMU, and KVM workflows.
+- Do not provision or run project-managed virtual machines for Access
+  development, builds, or tests, locally or in CI; this includes NixOS VM,
+  QEMU, and KVM workflows.
   External Linux builders and hosted CI infrastructure remain outside Access's
   machine ownership. Verify Access with
   evaluation, schema and assertion checks, generated-configuration parsing,
