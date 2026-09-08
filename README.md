@@ -17,6 +17,11 @@ module independently with `module.input = "access"`. Access owns the exact
 application closures; the consumer owns machines, placement, secret values,
 firewall policy, operations, and deployment.
 
+Access does not provision or run project-managed VMs for development, builds,
+or tests, locally or in CI. External Linux builders and hosted CI
+infrastructure remain outside Access machine ownership; see
+[Verification](docs/verification.md) for the accepted checks.
+
 Version `v0.2.0` introduced TLS-PSK-gated emergency SSH in place of Fail2ban and
 fwknop. Version `v0.3.0` restricts the Tailscale `authKeySecretName` setting to
 safe identifiers; its module IDs, roles, defaults, and package closures are
