@@ -40,3 +40,20 @@ the reusable Clan service recipes that configure them.
 Do not create or mutate GitHub resources, publish a release, deploy a machine,
 or perform provider, secret, backup, restore, or prune operations without an
 explicit owner approval in the current turn.
+
+## Agent skills
+
+### Issue tracker
+
+Tasks and specs live in GitHub Issues. Before tracker operations, read
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels. Before triaging, read
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context layout. Before domain exploration or recording
+decisions, read `docs/agents/domain.md`.

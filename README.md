@@ -54,6 +54,9 @@ can recover a failed OS, firewall blocking both paths, or lost public routing.
   restriction; [v0.2.0 migration](docs/migration-v0.2.0.md) covers the earlier
   service replacement.
 - [CHANGELOG](CHANGELOG.md) is the source for release notes.
+- Agent workflows: [issue tracker](docs/agents/issue-tracker.md),
+  [triage labels](docs/agents/triage-labels.md), and
+  [domain docs](docs/agents/domain.md).
 
 The extraction starts from Clanwright source commit
 `8c250131229b0476af95f5b068401e28fb0511f6`.
