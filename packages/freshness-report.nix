@@ -1,9 +1,13 @@
-{ pkgs, versions }:
+{
+  pkgs,
+  versions,
+  curl ? pkgs.curl,
+}:
 pkgs.writeShellApplication {
   name = "access-freshness-report";
   runtimeInputs = [
     pkgs.coreutils
-    pkgs.curl
+    curl
     pkgs.jq
     pkgs.gnugrep
     pkgs.gnused
@@ -32,10 +36,11 @@ pkgs.writeShellApplication {
     jq -n --arg observedAt "$observed_at" '{observedAt: $observedAt, packages: {}}' > "$report"
 
     update_report() {
-      name="$1"
-      actual="$2"
-      state="$3"
-      latest="$4"
+      local name="$1"
+      local actual="$2"
+      local state="$3"
+      local latest="$4"
+      local next
       next="$(mktemp)"
       if [ "$latest" = "__NULL__" ]; then
         jq --arg name "$name" --arg actual "$actual" --arg state "$state" \
@@ -49,54 +54,82 @@ pkgs.writeShellApplication {
       mv "$next" "$report"
     }
 
-    probe() {
-      name="$1"
-      actual="$2"
-      url="$3"
-      headers=()
+    fetch_release() {
+      local name="$1"
+      local url="$2"
+      local -a headers=()
       if [ "$name" = tailscale ]; then
         headers=(--header 'Accept: application/vnd.github+json')
       fi
-      if ! response="$(curl --fail --silent --show-error --location \
+      curl --disable --fail --silent --show-error --location \
         --connect-timeout 5 --max-time 10 --retry 0 \
-        "''${headers[@]}" --header 'User-Agent: clanwright-access-freshness' "$url" 2>/dev/null)"; then
+        "''${headers[@]}" --header 'User-Agent: clanwright-access-freshness' "$url" 2>/dev/null
+    }
+
+    parse_tailscale() {
+      local response="$1"
+      local tag
+      local latest
+      if ! printf '%s' "$response" | jq -e \
+        'type == "object" and (.tag_name | type == "string") and (.draft | type == "boolean") and (.prerelease | type == "boolean")' \
+        >/dev/null; then
+        return 1
+      fi
+      if [ "$(printf '%s' "$response" | jq -r '.draft or .prerelease')" = "true" ]; then
+        printf '%s' __UNKNOWN__
+        return
+      fi
+      tag="$(printf '%s' "$response" | jq -r '.tag_name')"
+      latest="''${tag#v}"
+      printf '%s' "$latest" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' || return 1
+      printf '%s' "$latest"
+    }
+
+    parse_stunnel() {
+      printf '%s' "$1" | { grep -oE 'Version [0-9]+\.[0-9]+ released' || true; } |
+        sed -E 's/^Version //; s/ released$//' | sort -Vu | tail -n 1
+    }
+
+    parse_openssh() {
+      printf '%s' "$1" | { grep -oE 'openssh-[0-9]+\.[0-9]+p[0-9]+\.tar\.gz' || true; } |
+        sed -E 's/^openssh-//; s/\.tar\.gz$//' | sort -Vu | tail -n 1
+    }
+
+    release_state() {
+      local actual="$1"
+      local latest="$2"
+      local newest
+      newest="$(printf '%s\n%s\n' "$actual" "$latest" | sort -V | tail -n 1)"
+      if [ "$newest" = "$actual" ]; then printf '%s' current; else printf '%s' lag; fi
+    }
+
+    probe() {
+      local name="$1"
+      local actual="$2"
+      local url="$3"
+      local response
+      local parser
+      local latest
+      local state
+      if ! response="$(fetch_release "$name" "$url")"; then
         update_report "$name" "$actual" unknown __NULL__
         return
       fi
       case "$name" in
-        tailscale)
-          if ! printf '%s' "$response" | jq -e \
-            'type == "object" and (.tag_name | type == "string") and (.draft | type == "boolean") and (.prerelease | type == "boolean")' \
-            >/dev/null; then
-            echo "malformed release metadata for $name" >&2
-            exit 1
-          fi
-          if [ "$(printf '%s' "$response" | jq -r '.draft or .prerelease')" = "true" ]; then
-            update_report "$name" "$actual" unknown __NULL__
-            return
-          fi
-          tag="$(printf '%s' "$response" | jq -r '.tag_name')"
-          latest="''${tag#v}"
-          if ! printf '%s' "$latest" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
-            latest=""
-          fi
-          ;;
-        stunnel)
-          latest="$(printf '%s' "$response" | { grep -oE 'Version [0-9]+\.[0-9]+ released' || true; } |
-            sed -E 's/^Version //; s/ released$//' | sort -Vu | tail -n 1)"
-          ;;
-        openssh)
-          latest="$(printf '%s' "$response" | { grep -oE 'openssh-[0-9]+\.[0-9]+p[0-9]+\.tar\.gz' || true; } |
-            sed -E 's/^openssh-//; s/\.tar\.gz$//' | sort -Vu | tail -n 1)"
-          ;;
+        tailscale) parser=parse_tailscale ;;
+        stunnel) parser=parse_stunnel ;;
+        openssh) parser=parse_openssh ;;
         *) exit 2 ;;
       esac
-      if [ -z "$latest" ]; then
+      if ! latest="$($parser "$response")" || [ -z "$latest" ]; then
         echo "malformed release metadata for $name" >&2
         exit 1
       fi
-      newest="$(printf '%s\n%s\n' "$actual" "$latest" | sort -V | tail -n 1)"
-      if [ "$newest" = "$actual" ]; then state=current; else state=lag; fi
+      if [ "$latest" = __UNKNOWN__ ]; then
+        update_report "$name" "$actual" unknown __NULL__
+        return
+      fi
+      state="$(release_state "$actual" "$latest")"
       update_report "$name" "$actual" "$state" "$latest"
     }
 

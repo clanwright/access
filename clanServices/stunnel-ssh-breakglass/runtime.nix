@@ -6,35 +6,19 @@
   ...
 }:
 let
-  serviceName = "stunnel-ssh-breakglass";
-  sshdServiceName = "${serviceName}-sshd";
-  hostKeyServiceName = "${serviceName}-hostkey";
-  stunnelRunDir = "/run/${serviceName}";
-  sshdRunDir = "/run/${sshdServiceName}";
-  stunnelConfig = "${stunnelRunDir}/stunnel.conf";
-  authorizedKeysPath = "${sshdRunDir}/authorized_keys";
-  stateDir = "/var/lib/${serviceName}";
-  hostKeyPath = "${stateDir}/ssh_host_ed25519_key";
-  recoveryHome = "/var/lib/${serviceName}-recovery";
-  accessStunnel = self.packages.${pkgs.stdenv.hostPlatform.system}.stunnel;
-  accessOpenSSH = self.packages.${pkgs.stdenv.hostPlatform.system}.openssh;
-  pskSecretPath = config.sops.secrets.${settings.pskSecretName}.path;
-  authorizedKeysSecretPath = config.sops.secrets.${settings.authorizedKeysSecretName}.path;
   rendered = import ./rendering.nix {
     inherit
-      accessOpenSSH
-      authorizedKeysPath
-      hostKeyPath
-      hostKeyServiceName
       lib
       pkgs
-      serviceName
+      self
       settings
-      sshdRunDir
-      sshdServiceName
-      stunnelConfig
       ;
   };
+  inherit (rendered.names) hostKey service sshd;
+  inherit (rendered.packages) openssh stunnel;
+  inherit (rendered) paths;
+  pskSecretPath = config.sops.secrets.${settings.pskSecretName}.path;
+  authorizedKeysSecretPath = config.sops.secrets.${settings.authorizedKeysSecretName}.path;
 in
 {
   assertions = [
@@ -52,18 +36,26 @@ in
     }
   ];
 
-  sops.secrets.${settings.pskSecretName} = {
-    owner = "root";
-    group = "root";
-    mode = "0400";
-    restartUnits = [ "${serviceName}.service" ];
-  };
-  sops.secrets.${settings.authorizedKeysSecretName} = {
-    owner = "root";
-    group = "root";
-    mode = "0400";
-    restartUnits = [ "${sshdServiceName}.service" ];
-  };
+  sops.secrets = lib.mkMerge [
+    {
+      ${settings.pskSecretName} = {
+        owner = "root";
+        group = "root";
+        mode = "0400";
+        restartUnits = [ "${service}.service" ];
+      };
+    }
+    {
+      ${settings.authorizedKeysSecretName} = {
+        owner = "root";
+        group = "root";
+        mode = "0400";
+        restartUnits = [ "${sshd}.service" ];
+      };
+    }
+  ];
+
+  clan.core.state.${service}.folders = [ paths.state ];
 
   users.groups.sshd = { };
   users.groups.${settings.recoveryUser} = { };
@@ -75,13 +67,13 @@ in
   users.users.${settings.recoveryUser} = {
     isNormalUser = true;
     createHome = true;
-    home = recoveryHome;
+    home = paths.recoveryHome;
     group = settings.recoveryUser;
     shell = pkgs.bashInteractive;
     description = "Emergency recovery account managed by @clanwright/stunnel-ssh-breakglass";
   };
 
-  security.pam.services.${sshdServiceName} = {
+  security.pam.services.${sshd} = {
     startSession = true;
     showMotd = false;
     unixAuth = false;
@@ -99,15 +91,15 @@ in
   ];
 
   systemd.services = {
-    ${hostKeyServiceName} = {
+    ${hostKey} = {
       description = "Generate an isolated host key for TLS SSH break-glass access";
-      before = [ "${sshdServiceName}.service" ];
+      before = [ "${sshd}.service" ];
 
       serviceConfig = {
         Type = "oneshot";
         ExecStart = rendered.generateHostKey;
         RemainAfterExit = true;
-        StateDirectory = serviceName;
+        StateDirectory = service;
         StateDirectoryMode = "0700";
         UMask = "0077";
         NoNewPrivileges = true;
@@ -118,25 +110,25 @@ in
       };
     };
 
-    ${sshdServiceName} = {
+    ${sshd} = {
       description = "Loopback SSH daemon for TLS break-glass access";
       wantedBy = [ "multi-user.target" ];
       after = [
         "network.target"
         "sops-install-secrets.service"
-        "${hostKeyServiceName}.service"
+        "${hostKey}.service"
       ];
-      requires = [ "${hostKeyServiceName}.service" ];
+      requires = [ "${hostKey}.service" ];
       stopIfChanged = false;
 
       serviceConfig = {
         Type = "simple";
         ExecStartPre = [
           rendered.renderAuthorizedKeys
-          "${accessOpenSSH}/bin/sshd -t -f ${rendered.sshdConfig}"
+          "${openssh}/bin/sshd -t -f ${rendered.sshdConfig}"
         ];
-        ExecStart = "${accessOpenSSH}/bin/sshd -D -e -f ${rendered.sshdConfig}";
-        RuntimeDirectory = sshdServiceName;
+        ExecStart = "${openssh}/bin/sshd -D -e -f ${rendered.sshdConfig}";
+        RuntimeDirectory = sshd;
         RuntimeDirectoryMode = "0750";
         Group = settings.recoveryUser;
         LoadCredential = [ "authorized-keys:${authorizedKeysSecretPath}" ];
@@ -153,21 +145,21 @@ in
       };
     };
 
-    ${serviceName} = {
+    ${service} = {
       description = "TLS 1.3 PSK SSH break-glass listener";
       wantedBy = [ "multi-user.target" ];
       after = [
         "network.target"
         "sops-install-secrets.service"
-        "${sshdServiceName}.service"
+        "${sshd}.service"
       ];
-      requires = [ "${sshdServiceName}.service" ];
+      requires = [ "${sshd}.service" ];
 
       serviceConfig = {
         Type = "simple";
         ExecStartPre = rendered.renderStunnelConfig;
-        ExecStart = "${accessStunnel}/bin/stunnel ${stunnelConfig}";
-        RuntimeDirectory = serviceName;
+        ExecStart = "${stunnel}/bin/stunnel ${paths.stunnelConfig}";
+        RuntimeDirectory = service;
         RuntimeDirectoryMode = "0700";
         DynamicUser = true;
         LoadCredential = [ "psk:${pskSecretPath}" ];

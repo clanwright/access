@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mode=full
+if [[ "$#" -eq 1 && "$1" == --native-recovery ]]; then
+  mode=native-recovery
+elif [[ "$#" -ne 0 ]]; then
+  echo 'usage: bash scripts/verify.sh [--native-recovery]' >&2
+  exit 2
+fi
+
 if [[ "${ACCESS_VERIFY_IN_DEV_SHELL:-}" != 1 ]]; then
   exec nix develop --no-write-lock-file --command \
-    env ACCESS_VERIFY_IN_DEV_SHELL=1 bash scripts/verify.sh
+    env ACCESS_VERIFY_IN_DEV_SHELL=1 bash scripts/verify.sh "$@"
 fi
 
 verify_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 verify_started_seconds=$SECONDS
-if [[ -n "${ACCESS_VERIFY_LOG_DIR:-}" ]]; then
-  verify_log_dir=$ACCESS_VERIFY_LOG_DIR
-  mkdir -p "$verify_log_dir"
-else
-  mkdir -p .work/verification
-  verify_log_dir="$(mktemp -d ".work/verification/$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")"
-fi
+verify_log_root=${ACCESS_VERIFY_LOG_DIR:-.work/verification}
+mkdir -p "$verify_log_root"
+verify_log_dir="$(mktemp -d "$verify_log_root/$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")"
 summary="$verify_log_dir/summary.log"
 
 finish() {
@@ -56,7 +60,7 @@ static_checks() {
 }
 
 secret_scan() {
-  gitleaks dir . --no-banner --redact
+  gitleaks dir . --config .gitleaks.toml --no-banner --redact
 }
 
 flake_checks() {
@@ -96,13 +100,23 @@ linux_checks() {
     --option allow-import-from-derivation false "${check_refs[@]}"
 }
 
+native_recovery() {
+  local native_system
+  native_system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+  nix build --no-write-lock-file --no-link \
+    --option allow-import-from-derivation false \
+    .#stunnel .#openssh ".#checks.$native_system.recovery-client-config"
+}
+
+if [[ "$mode" == native-recovery ]]; then
+  run_stage native-recovery native_recovery
+  exit 0
+fi
+
 run_stage formatting formatting
 run_stage static static_checks
 run_stage secret-scan secret_scan
 run_stage flake-check flake_checks
-run_stage native-recovery nix build --no-write-lock-file --no-link \
-  --option allow-import-from-derivation false \
-  .#stunnel .#openssh \
-  .#checks."$(nix eval --impure --raw --expr builtins.currentSystem)".recovery-client-config
+run_stage native-recovery native_recovery
 run_stage packages packages
 run_stage linux-checks linux_checks

@@ -3,13 +3,29 @@
   root,
   self,
 }:
-let
-  fixture = import ../fixtures/consumer.nix;
-in
 {
-  instanceNames ? builtins.attrNames fixture.inventory.instances,
+  forceMachine ? true,
+  instanceNames ? null,
+  instances ? null,
+  machineName ? "access-node",
+  machineNames ? [ "access-node" ],
+  machineModules ? [ ],
 }:
 let
+  baseFixture = import ../fixtures/consumer.nix { };
+  requestedInstances =
+    if instances != null then
+      instances
+    else if instanceNames != null then
+      builtins.intersectAttrs (inputs.nixpkgs.lib.genAttrs instanceNames (
+        _: null
+      )) baseFixture.inventory.instances
+    else
+      baseFixture.inventory.instances;
+  fixture = import ../fixtures/consumer.nix {
+    instances = requestedInstances;
+    inherit machineNames machineModules;
+  };
   consumer = inputs.clan-core.lib.clan {
     self.inputs = {
       access = self;
@@ -20,16 +36,12 @@ let
     imports = [
       {
         inherit (fixture) machines;
-        inventory = fixture.inventory // {
-          instances = builtins.intersectAttrs (inputs.nixpkgs.lib.genAttrs instanceNames (
-            _: null
-          )) fixture.inventory.instances;
-        };
+        inherit (fixture) inventory;
       }
     ];
   };
   config = consumer.config;
-  machine = config.nixosConfigurations.access-node.config;
+  machine = config.nixosConfigurations.${machineName}.config;
   # Force every assertion, unit rendering, and the full NixOS derivation.
   # This evaluates the pinned consumer; it does not build or run the machine.
   assertionsPass = builtins.all (entry: entry.assertion) machine.assertions;
@@ -38,7 +50,11 @@ let
     builtins.seq machine.system.build.toplevel.drvPath assertionsPass
   );
 in
-assert evaluated;
+assert !forceMachine || evaluated;
 {
-  inherit config machine;
+  inherit
+    config
+    evaluated
+    machine
+    ;
 }

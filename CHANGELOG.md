@@ -5,6 +5,37 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-12
+
+### Fixed
+
+- Register the emergency host identity directory as retained Clan state and
+  reject multiple break-glass instances on the same machine without changing
+  existing service names, paths, or public settings.
+- Isolate verification logs in a unique directory for every run, including
+  when an explicit artifact root is supplied.
+- Keep public SSH signature fingerprints from producing false secret-scan
+  failures, with a whole-line exception and negative scope checks.
+
+### Changed
+
+- Evaluate service scenarios through the registered Clan modules and a shared
+  consumer fixture, with named contract failures and generated-configuration
+  checks instead of duplicated internal module assembly.
+- Separate freshness transport, release parsing, and state classification;
+  preserve its CLI, report schema, network-error behavior, and atomic output,
+  and ignore ambient curl configuration for its bounded unauthenticated requests.
+
+### Verification
+
+- Verify release tags against the repository's trusted public SSH signer
+  policy while retaining manual signing and GitHub Release publication.
+- Run native ARM macOS recovery package and parser checks in CI and the release
+  gate, alongside the complete Linux gate, with both required by the existing
+  aggregate `verify` status.
+- Validate required workflow structure and permissions as YAML, and expose
+  `scripts/verify.sh --native-recovery` for the focused native gate.
+
 ## [1.0.0] - 2026-09-06
 
 ### Changed

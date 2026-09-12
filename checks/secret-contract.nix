@@ -1,19 +1,28 @@
 {
+  inputs,
   lib,
   pkgs,
   root,
   self,
 }:
 let
+  registeredRole =
+    moduleId: roleName:
+    let
+      evaluated =
+        (inputs.clan-core.lib.evalService {
+          modules = [ self.clan.modules.${moduleId} ];
+          prefix = [ ];
+        }).config;
+    in
+    evaluated.roles.${roleName};
+  tailscaleRole = registeredRole "@clanwright/tailscale-admin" "admin-access";
+  emergencyRole = registeredRole "@clanwright/stunnel-ssh-breakglass" "breakglass";
   optionNames =
     role:
     builtins.attrNames (
       builtins.removeAttrs (lib.evalModules { modules = [ role.interface ]; }).options [ "_module" ]
     );
-  tailscaleRole =
-    (import ../clanServices/tailscale-admin/default.nix { inherit self; }).roles.admin-access;
-  emergencyRole =
-    (import ../clanServices/stunnel-ssh-breakglass/default.nix { inherit self; }).roles.breakglass;
   evaluateSettings =
     role: candidate:
     builtins.tryEval (
@@ -22,7 +31,6 @@ let
         inherit (role) interface;
       }
     );
-  # Positive controls distinguish a working evaluator from universal failure.
   roleRejectsPlaintext =
     role:
     (evaluateSettings role { }).success
@@ -35,22 +43,31 @@ let
       "secretValue"
       "token"
     ];
-  defaults = (lib.evalModules { modules = [ tailscaleRole.interface ]; }).config;
-  tailscale = (tailscaleRole.perInstance { settings = defaults; }).nixosModule {
-    config.sops.secrets.${defaults.authKeySecretName}.path =
-      "/run/secrets/${defaults.authKeySecretName}";
-    inherit lib pkgs;
+  instances = {
+    tailscale-admin = {
+      module = {
+        input = "access";
+        name = "@clanwright/tailscale-admin";
+      };
+      roles.admin-access.machines.access-node = { };
+    };
+    stunnel-ssh-breakglass = {
+      module = {
+        input = "access";
+        name = "@clanwright/stunnel-ssh-breakglass";
+      };
+      roles.breakglass.machines.access-node = { };
+    };
   };
-  secret = tailscale.sops.secrets.${defaults.authKeySecretName};
-  contract =
-    optionNames tailscaleRole == [
-      "acceptDns"
-      "authKeySecretName"
-      "lifecycle"
-      "openFirewall"
-      "useRoutingFeatures"
-    ]
-    &&
+  machine =
+    ((import ./lib/consumer.nix { inherit inputs root self; }) { inherit instances; }).machine;
+  tailscaleSecret = machine.sops.secrets.tailscale-auth-key;
+  pskSecret = machine.sops.secrets.stunnel-ssh-psk;
+  authorizedKeysSecret = machine.sops.secrets.recovery-ssh-authorized-keys;
+  rootOnly = secret: secret.owner == "root" && secret.group == "root" && secret.mode == "0400";
+  check = import ./lib/contract.nix { inherit lib; };
+  contract = check "secret boundary contract" {
+    emergency-option-schema =
       optionNames emergencyRole == [
         "authorizedKeysSecretName"
         "listenAddress"
@@ -58,19 +75,31 @@ let
         "recoveryUser"
         "sshPort"
         "tlsPort"
-      ]
-    && secret.owner == "root"
-    && secret.group == "root"
-    && secret.mode == "0400"
-    && roleRejectsPlaintext tailscaleRole
-    && roleRejectsPlaintext emergencyRole
-    && builtins.all (name: !(builtins.pathExists (root + "/${name}"))) [
+      ];
+    no-secret-directories = builtins.all (name: !(builtins.pathExists (root + "/${name}"))) [
       "sops"
       "vars"
       "secrets"
     ];
+    plaintext-settings-rejected =
+      roleRejectsPlaintext tailscaleRole && roleRejectsPlaintext emergencyRole;
+    registered-secret-metadata =
+      rootOnly tailscaleSecret
+      && rootOnly pskSecret
+      && rootOnly authorizedKeysSecret
+      && pskSecret.restartUnits == [ "stunnel-ssh-breakglass.service" ]
+      && authorizedKeysSecret.restartUnits == [ "stunnel-ssh-breakglass-sshd.service" ];
+    tailscale-option-schema =
+      optionNames tailscaleRole == [
+        "acceptDns"
+        "authKeySecretName"
+        "lifecycle"
+        "openFirewall"
+        "useRoutingFeatures"
+      ];
+  };
 in
-if contract then
-  pkgs.runCommand "access-secret-contract" { } ''touch "$out"''
-else
-  throw "Access secret boundary changed"
+assert contract;
+pkgs.runCommand "access-secret-contract" { } ''
+  touch "$out"
+''

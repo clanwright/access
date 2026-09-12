@@ -1,0 +1,10 @@
+title = "Access secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public SSH fingerprints in complete successful Git signature messages"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''^Good "git" signature for [A-Za-z0-9@._+-]+ with ED25519 key SHA256:[A-Za-z0-9+/]{43}$''']

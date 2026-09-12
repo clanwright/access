@@ -17,9 +17,33 @@ check.
 On macOS, a configured Linux builder is required to execute the complete gate;
 evaluation alone is not a passing Linux build.
 
+CI and the release gate also run a separate native `aarch64-darwin` job for
+both recovery packages and their parser check. Linux and Darwin jobs run in
+parallel; the stable `verify` status waits for both and succeeds only when both
+jobs succeed. A failed, skipped, or cancelled platform job cannot produce a
+successful aggregate gate. This preserves the existing required status check.
+The same focused entrypoint
+can be invoked locally without a Linux builder:
+
+```bash
+bash scripts/verify.sh --native-recovery
+```
+
+This focused mode does not replace the complete Linux gate.
+
 The entrypoint retains per-stage logs and durations, plus a whole-run summary,
 under `.work/verification/`. Set `ACCESS_VERIFY_LOG_DIR` to select an explicit
-artifact directory.
+artifact root. Every invocation creates a unique timestamped child directory,
+including failed runs, so an earlier stage log cannot be mistaken for current
+evidence. The CLI contract checks this isolation and the native-only scope.
+
+The full-tree secret scan explicitly loads `.gitleaks.toml` and retains the
+default detection rules. Its only exception is the complete successful Git SSH
+signature message containing a public Ed25519 fingerprint, which the generic
+API-key rule otherwise mistakes for a credential. It excludes no directories.
+The scanner contract uses the existing public release key to check this exception
+and verifies that adding unrelated text before or after the message is still
+reported. It creates no credential fixtures.
 
 The flake gate includes service API contracts, exact registry contents,
 single and combined external placement, package precedence, secret metadata,
@@ -40,9 +64,12 @@ Import-from-derivation is disabled in the gate: generated configuration and
 script contents are inspected during check builds, never during evaluation.
 This keeps evaluation independent of a developer's populated build cache.
 
-Placement checks share a complete secret-free Clan consumer fixture. They
-force the NixOS toplevel derivation and generated service units, including
-assertions and per-machine setting overrides. The fixture uses Access's pinned
+Service scenarios share a complete secret-free Clan consumer fixture and use
+the registered module interface, including settings and placement overrides.
+Positive scenarios force the NixOS toplevel derivation, assertions, and generated
+service units. Negative scenarios check invalid settings and conflicting
+placement, with positive controls to distinguish rejection from a broken
+fixture. Contract failures identify the violated invariant. The fixture uses Access's pinned
 baseline; it does not establish compatibility with arbitrary consumer pins
 or replace building the consumer's real machine closure.
 
@@ -92,6 +119,7 @@ nix run .#freshness-report -- --output access-freshness.json
 failure produces `unknown` and exits successfully; a successful response with
 malformed metadata is blocking. The client makes one bounded unauthenticated
 request to each official stable source (Tailscale GitHub Releases, stunnel's
-release list, and OpenBSD's portable OpenSSH archive) and does not modify a
+release list, and OpenBSD's portable OpenSSH archive), ignores user curl
+configuration, and does not modify a
 lockfile or repository file unless the requested output path is inside the
 working tree.

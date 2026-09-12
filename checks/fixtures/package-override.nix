@@ -1,1 +1,4 @@
-args: import ../package-authority.nix (args // { mutation = true; })
+{ pkgs, ... }:
+{
+  services.tailscale.package = pkgs.hello;
+}

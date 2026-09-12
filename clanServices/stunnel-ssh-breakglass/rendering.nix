@@ -1,24 +1,39 @@
 {
-  accessOpenSSH,
-  authorizedKeysPath,
-  hostKeyPath,
-  hostKeyServiceName,
   lib,
   pkgs,
-  serviceName,
+  self,
   settings,
-  sshdRunDir,
-  sshdServiceName,
-  stunnelConfig,
 }:
-{
-  sshdConfig = pkgs.writeText "${sshdServiceName}-config" ''
+let
+  names = rec {
+    service = "stunnel-ssh-breakglass";
+    sshd = "${service}-sshd";
+    hostKey = "${service}-hostkey";
+  };
+  paths = rec {
+    stunnelRun = "/run/${names.service}";
+    sshdRun = "/run/${names.sshd}";
+    stunnelConfig = "${stunnelRun}/stunnel.conf";
+    authorizedKeys = "${sshdRun}/authorized_keys";
+    state = "/var/lib/${names.service}";
+    hostKey = "${state}/ssh_host_ed25519_key";
+    recoveryHome = "/var/lib/${names.service}-recovery";
+  };
+  packages = {
+    stunnel = self.packages.${pkgs.stdenv.hostPlatform.system}.stunnel;
+    openssh = self.packages.${pkgs.stdenv.hostPlatform.system}.openssh;
+  };
+in
+rec {
+  inherit names packages paths;
+
+  sshdConfig = pkgs.writeText "${names.sshd}-config" ''
     AddressFamily inet
     ListenAddress 127.0.0.1
     Port ${toString settings.sshPort}
-    HostKey ${hostKeyPath}
-    PidFile ${sshdRunDir}/sshd.pid
-    AuthorizedKeysFile ${authorizedKeysPath}
+    HostKey ${paths.hostKey}
+    PidFile ${paths.sshdRun}/sshd.pid
+    AuthorizedKeysFile ${paths.authorizedKeys}
     AuthorizedKeysCommand none
     AuthorizedPrincipalsFile none
     AllowUsers ${settings.recoveryUser}
@@ -31,7 +46,7 @@
     PermitEmptyPasswords no
     PermitRootLogin no
     UsePAM yes
-    PAMServiceName ${sshdServiceName}
+    PAMServiceName ${names.sshd}
     StrictModes yes
     PermitUserEnvironment no
     PermitUserRC no
@@ -54,10 +69,10 @@
     SyslogFacility AUTHPRIV
     PrintMotd no
     UseDNS no
-    Subsystem sftp ${accessOpenSSH}/libexec/sftp-server
+    Subsystem sftp ${packages.openssh}/libexec/sftp-server
   '';
 
-  renderStunnelConfig = pkgs.writeShellScript "${serviceName}-render-config" ''
+  renderStunnelConfig = pkgs.writeShellScript "${names.service}-render-config" ''
     set -euo pipefail
     : "''${CREDENTIALS_DIRECTORY:?systemd did not provide the stunnel PSK credential}"
 
@@ -72,7 +87,7 @@
     fi
 
     umask 077
-    ${pkgs.coreutils}/bin/cat > ${lib.escapeShellArg stunnelConfig} <<EOF
+    ${pkgs.coreutils}/bin/cat > ${lib.escapeShellArg paths.stunnelConfig} <<EOF
     foreground = yes
     debug = notice
     [ssh]
@@ -89,29 +104,29 @@
     TIMEOUTconnect = 10
     TIMEOUTidle = 900
     EOF
-    ${pkgs.coreutils}/bin/chmod 0600 ${lib.escapeShellArg stunnelConfig}
+    ${pkgs.coreutils}/bin/chmod 0600 ${lib.escapeShellArg paths.stunnelConfig}
   '';
 
-  renderAuthorizedKeys = pkgs.writeShellScript "${sshdServiceName}-render-authorized-keys" ''
+  renderAuthorizedKeys = pkgs.writeShellScript "${names.sshd}-render-authorized-keys" ''
     set -euo pipefail
     : "''${CREDENTIALS_DIRECTORY:?systemd did not provide recovery authorized keys}"
 
-    if ! ${accessOpenSSH}/bin/ssh-keygen -lf "$CREDENTIALS_DIRECTORY/authorized-keys" >/dev/null 2>&1; then
+    if ! ${packages.openssh}/bin/ssh-keygen -lf "$CREDENTIALS_DIRECTORY/authorized-keys" >/dev/null 2>&1; then
       echo "invalid recovery authorized-key file" >&2
       exit 1
     fi
 
-    ${pkgs.coreutils}/bin/install -d -m 0750 -o root -g ${lib.escapeShellArg settings.recoveryUser} ${lib.escapeShellArg sshdRunDir}
-    ${pkgs.coreutils}/bin/install -m 0440 -o root -g ${lib.escapeShellArg settings.recoveryUser} "$CREDENTIALS_DIRECTORY/authorized-keys" ${lib.escapeShellArg authorizedKeysPath}
+    ${pkgs.coreutils}/bin/install -d -m 0750 -o root -g ${lib.escapeShellArg settings.recoveryUser} ${lib.escapeShellArg paths.sshdRun}
+    ${pkgs.coreutils}/bin/install -m 0440 -o root -g ${lib.escapeShellArg settings.recoveryUser} "$CREDENTIALS_DIRECTORY/authorized-keys" ${lib.escapeShellArg paths.authorizedKeys}
   '';
 
-  generateHostKey = pkgs.writeShellScript "${hostKeyServiceName}-generate" ''
+  generateHostKey = pkgs.writeShellScript "${names.hostKey}-generate" ''
     set -euo pipefail
     umask 077
 
-    if [ ! -s ${lib.escapeShellArg hostKeyPath} ]; then
-      ${accessOpenSSH}/bin/ssh-keygen -q -t ed25519 -N "" -f ${lib.escapeShellArg hostKeyPath}
+    if [ ! -s ${lib.escapeShellArg paths.hostKey} ]; then
+      ${packages.openssh}/bin/ssh-keygen -q -t ed25519 -N "" -f ${lib.escapeShellArg paths.hostKey}
     fi
-    ${accessOpenSSH}/bin/ssh-keygen -lf ${lib.escapeShellArg hostKeyPath} >/dev/null
+    ${packages.openssh}/bin/ssh-keygen -lf ${lib.escapeShellArg paths.hostKey} >/dev/null
   '';
 }

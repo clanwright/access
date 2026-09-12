@@ -2,31 +2,39 @@
   inputs,
   lib,
   pkgs,
+  root,
   self,
   system,
 }:
 let
-  registeredModule =
-    self.clan.modules."@clanwright/tailscale-admin"
-      or (throw "@clanwright/tailscale-admin is not registered");
+  moduleId = "@clanwright/tailscale-admin";
+  registeredModule = self.clan.modules.${moduleId} or (throw "${moduleId} is not registered");
   evaluatedService =
     (inputs.clan-core.lib.evalService {
       modules = [ registeredModule ];
       prefix = [ ];
     }).config;
-  service = import ../clanServices/tailscale-admin/default.nix { inherit self; };
-  role = service.roles.admin-access;
+  role = evaluatedService.roles.admin-access;
   defaults = (lib.evalModules { modules = [ role.interface ]; }).config;
-  moduleFor =
-    settings:
-    (role.perInstance { inherit settings; }).nixosModule {
-      config.sops.secrets.${settings.authKeySecretName}.path =
-        "/run/secrets/${settings.authKeySecretName}";
-      inherit lib pkgs;
+  consumerFor = import ./lib/consumer.nix { inherit inputs root self; };
+  instance = name: settings: {
+    ${name} = {
+      module = {
+        input = "access";
+        name = moduleId;
+      };
+      roles.admin-access.machines.access-node = { inherit settings; };
     };
-  enabled = moduleFor defaults;
-  dnsEnabled = moduleFor (defaults // { acceptDns = true; });
-  disabled = moduleFor (defaults // { lifecycle = "disabled-retained"; });
+  };
+  scenario =
+    settings: machineModules:
+    (consumerFor {
+      instances = instance "tailscale-admin" settings;
+      inherit machineModules;
+    }).machine;
+  enabled = scenario { } [ ];
+  dnsEnabled = scenario { acceptDns = true; } [ ];
+  disabled = scenario { lifecycle = "disabled-retained"; } [ ];
   interfaceAccepts =
     authKeySecretName:
     (builtins.tryEval (
@@ -34,59 +42,64 @@ let
         (lib.evalModules {
           modules = [
             role.interface
-            { config.authKeySecretName = authKeySecretName; }
+            { config = { inherit authKeySecretName; }; }
           ];
         }).config.authKeySecretName
         true
     )).success;
-  unwrap = value: if builtins.isAttrs value && value ? content then unwrap value.content else value;
-  contract =
-    builtins.deepSeq evaluatedService.result.api.schema true
-    && service.manifest.name == "@clanwright/tailscale-admin"
-    && builtins.attrNames service.roles == [ "admin-access" ]
-    && defaults.authKeySecretName == "tailscale-auth-key"
-    && interfaceAccepts "tailscale_auth.key-1"
-    && !(interfaceAccepts "tailscale/auth-key")
-    && !(interfaceAccepts ".tailscale-auth-key")
-    && !(interfaceAccepts "tailscale-auth-key\nunsafe")
-    && defaults.lifecycle == "enabled"
-    && defaults.useRoutingFeatures == "none"
-    && defaults.openFirewall
-    && !defaults.acceptDns
-    && enabled.services.tailscale.enable
-    && !(disabled.services.tailscale.enable)
-    && enabled.services.tailscale.authKeyFile == "/run/secrets/tailscale-auth-key"
-    &&
-      enabled.services.tailscale.extraUpFlags == [
-        "--accept-dns=false"
-        "--ssh=false"
-      ]
-    &&
-      enabled.services.tailscale.extraSetFlags == [
-        "--accept-dns=false"
-        "--ssh=false"
-      ]
-    &&
+  secret = enabled.sops.secrets.${defaults.authKeySecretName};
+  check = import ./lib/contract.nix { inherit lib; };
+  contract = check "tailscale-admin contract" {
+    accept-dns-customization =
       dnsEnabled.services.tailscale.extraUpFlags == [
         "--accept-dns=true"
         "--ssh=false"
       ]
-    &&
-      dnsEnabled.services.tailscale.extraSetFlags == [
-        "--accept-dns=true"
+      &&
+        dnsEnabled.services.tailscale.extraSetFlags == [
+          "--accept-dns=true"
+          "--ssh=false"
+        ];
+    default-flags =
+      enabled.services.tailscale.extraUpFlags == [
+        "--accept-dns=false"
         "--ssh=false"
       ]
-    && unwrap enabled.services.tailscale.package == self.packages.${system}.tailscale
-    && enabled.clan.core.state.tailscale.folders == [ "/var/lib/tailscale" ]
-    && !(enabled ? systemd)
-    && !(disabled ? systemd)
-    && enabled.sops.secrets.tailscale-auth-key.owner == "root"
-    && enabled.sops.secrets.tailscale-auth-key.group == "root"
-    && enabled.sops.secrets.tailscale-auth-key.mode == "0400";
+      &&
+        enabled.services.tailscale.extraSetFlags == [
+          "--accept-dns=false"
+          "--ssh=false"
+        ];
+    default-settings =
+      defaults.authKeySecretName == "tailscale-auth-key"
+      && defaults.lifecycle == "enabled"
+      && defaults.useRoutingFeatures == "none"
+      && defaults.openFirewall
+      && !defaults.acceptDns;
+    disabled-retained =
+      !disabled.services.tailscale.enable
+      && disabled.clan.core.state.tailscale.folders == [ "/var/lib/tailscale" ]
+      && disabled.sops.secrets ? tailscale-auth-key;
+    enabled = enabled.services.tailscale.enable;
+    interface-schema = builtins.deepSeq evaluatedService.result.api.schema true;
+    manifest =
+      evaluatedService.manifest.name == moduleId
+      && builtins.attrNames evaluatedService.roles == [ "admin-access" ];
+    package-authority = enabled.services.tailscale.package == self.packages.${system}.tailscale;
+    secret-metadata =
+      enabled.services.tailscale.authKeyFile == "/run/secrets/tailscale-auth-key"
+      && secret.owner == "root"
+      && secret.group == "root"
+      && secret.mode == "0400";
+    secret-name-type =
+      interfaceAccepts "tailscale_auth.key-1"
+      && !(interfaceAccepts "tailscale/auth-key")
+      && !(interfaceAccepts ".tailscale-auth-key")
+      && !(interfaceAccepts "tailscale-auth-key\nunsafe");
+    ssh-independence = !enabled.services.openssh.enable && !(enabled.systemd.services ? sshd);
+  };
 in
-if contract then
-  pkgs.runCommand "tailscale-admin-contract" { } ''
-    touch "$out"
-  ''
-else
-  throw "Tailscale admin contract changed"
+assert contract;
+pkgs.runCommand "tailscale-admin-contract" { } ''
+  touch "$out"
+''
