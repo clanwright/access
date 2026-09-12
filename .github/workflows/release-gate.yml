@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
+  linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -20,6 +20,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Fetch protected main
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
@@ -38,3 +39,27 @@ jobs:
           path: access-freshness.json
           if-no-files-found: error
           retention-days: 30
+
+  native-arm-darwin:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - name: Build native recovery dependencies and parse client config
+        run: bash scripts/verify.sh --native-recovery
+
+  verify:
+    needs: [linux, native-arm-darwin]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require both platform gates
+        run: |
+          test "${{ needs.linux.result }}" = success
+          test "${{ needs.native-arm-darwin.result }}" = success

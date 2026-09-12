@@ -7,6 +7,8 @@
 }:
 {
   repository-policy = import ./repository-policy.nix { inherit pkgs root; };
+  verification-contract = import ./verification-contract.nix { inherit pkgs root; };
+  secret-scan-contract = import ./secret-scan.nix { inherit pkgs root; };
   flake-contract = import ./flake-contract.nix {
     inherit
       inputs
@@ -20,6 +22,7 @@
     inherit
       inputs
       pkgs
+      root
       self
       system
       ;
@@ -29,6 +32,7 @@
     inherit
       inputs
       pkgs
+      root
       self
       system
       ;
@@ -55,11 +59,22 @@
     inherit pkgs self system;
   };
   package-authority = import ./package-authority.nix {
-    inherit pkgs self system;
+    inherit
+      inputs
+      pkgs
+      root
+      self
+      system
+      ;
     lib = inputs.nixpkgs.lib;
   };
   secret-contract = import ./secret-contract.nix {
-    inherit pkgs root self;
+    inherit
+      inputs
+      pkgs
+      root
+      self
+      ;
     lib = inputs.nixpkgs.lib;
   };
   freshness-contract = import ./freshness-contract.nix {

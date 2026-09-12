@@ -9,6 +9,8 @@ let
     "scripts/verify.sh"
     "scripts/verify-release.py"
     "scripts/verify-workflows.py"
+    "scripts/test-release.py"
+    "scripts/test-workflows.py"
     "checks/fixtures/release/pinned.yml"
     "checks/fixtures/release/tag.yml"
     "checks/fixtures/release/major-tag.yml"
@@ -20,6 +22,7 @@ let
     ".github/workflows/ci.yml"
     ".github/workflows/freshness.yml"
     ".github/workflows/release-gate.yml"
+    ".github/release-signers"
   ];
   missingPaths = builtins.filter (path: !(builtins.pathExists (root + "/${path}"))) requiredPaths;
 in
@@ -30,7 +33,7 @@ else
     {
       src = root;
       nativeBuildInputs = [
-        pkgs.gnugrep
+        pkgs.git
         python
       ];
     }
@@ -54,6 +57,10 @@ else
 
       ${python}/bin/python "$src/scripts/verify-workflows.py" "$src/.github/workflows"
 
+      ${python}/bin/python "$src/scripts/test-workflows.py"
+
+      ${python}/bin/python "$src/scripts/test-release.py"
+
       ${python}/bin/python "$src/scripts/verify-release.py" \
         --metadata-only \
         --tag v1.2.3 \
@@ -73,20 +80,6 @@ else
         --tag v1.2.4 \
         --changelog "$src/checks/fixtures/release/changelog.md"; then
         fail "tag without a matching CHANGELOG heading was accepted"
-      fi
-
-      grep -qF 'tags: ["v*"]' "$src/.github/workflows/release-gate.yml"
-      grep -qF 'fetch-depth: 0' "$src/.github/workflows/release-gate.yml"
-      grep -qF 'scripts/verify-release.py' "$src/.github/workflows/release-gate.yml"
-      grep -qF 'run: bash scripts/verify.sh' "$src/.github/workflows/ci.yml"
-      grep -qF 'run: bash scripts/verify.sh' "$src/.github/workflows/release-gate.yml"
-      grep -qF 'workflow_dispatch:' "$src/.github/workflows/freshness.yml"
-      grep -qF 'access-freshness.json' "$src/.github/workflows/freshness.yml"
-      grep -qF 'access-freshness.json' "$src/.github/workflows/release-gate.yml"
-      grep -qF '## [0.1.0]' "$src/CHANGELOG.md"
-
-      if grep -RE 'gh release|create-release|action-gh-release|releases:[[:space:]]*write' "$src/.github/workflows"; then
-        fail "workflow may publish a release"
       fi
 
       touch "$out"

@@ -19,23 +19,74 @@ let
   mockCurl = pkgs.writeShellScriptBin "curl" ''
     set -eu
 
-    url="''${!#}"
-    args="$(printf '<%s>' "$@")"
-    common='<--fail><--silent><--show-error><--location><--connect-timeout><5><--max-time><10><--retry><0>'
-    user_agent='<--header><User-Agent: clanwright-access-freshness>'
+    if [ "''${1:-}" != --disable ]; then
+      echo "curl configuration must be disabled by the first argument" >&2
+      exit 65
+    fi
+    shift
+
+    url=""
+    fail=0
+    silent=0
+    show_error=0
+    location=0
+    connect_timeout=""
+    max_time=""
+    retry=""
+    user_agent=0
+    github_accept=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --fail) fail=$((fail + 1)); shift ;;
+        --silent) silent=$((silent + 1)); shift ;;
+        --show-error) show_error=$((show_error + 1)); shift ;;
+        --location) location=$((location + 1)); shift ;;
+        --connect-timeout) connect_timeout="''${2:?}"; shift 2 ;;
+        --max-time) max_time="''${2:?}"; shift 2 ;;
+        --retry) retry="''${2:?}"; shift 2 ;;
+        --header)
+          case "''${2:?}" in
+            'User-Agent: clanwright-access-freshness') user_agent=$((user_agent + 1)) ;;
+            'Accept: application/vnd.github+json') github_accept=$((github_accept + 1)) ;;
+            Authorization:*|Proxy-Authorization:*)
+              echo "authenticated freshness request" >&2
+              exit 65 ;;
+            *)
+              echo "unexpected freshness header: $2" >&2
+              exit 65 ;;
+          esac
+          shift 2 ;;
+        --user|--netrc|--netrc-file|--oauth2-bearer|--cookie|--cookie-jar|--data|--request)
+          echo "authenticated or non-GET freshness request: $1" >&2
+          exit 65 ;;
+        https://*)
+          if [ -n "$url" ]; then
+            echo "multiple freshness endpoints in one request" >&2
+            exit 65
+          fi
+          url="$1"
+          shift ;;
+        *)
+          echo "unexpected curl argument: $1" >&2
+          exit 65 ;;
+      esac
+    done
+
+    if [ "$fail" -ne 1 ] || [ "$silent" -ne 1 ] || [ "$show_error" -ne 1 ] \
+      || [ "$location" -ne 1 ] || [ "$connect_timeout" != 5 ] \
+      || [ "$max_time" != 10 ] || [ "$retry" != 0 ] || [ "$user_agent" -ne 1 ]; then
+      echo "freshness request is not bounded as required" >&2
+      exit 65
+    fi
     case "$url" in
       https://api.github.com/repos/tailscale/tailscale/releases/latest)
-        expected="$common<--header><Accept: application/vnd.github+json>$user_agent<$url>" ;;
+        test "$github_accept" -eq 1 ;;
       https://www.stunnel.org/versions.html|https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/)
-        expected="$common$user_agent<$url>" ;;
+        test "$github_accept" -eq 0 ;;
       *)
         echo "unexpected freshness endpoint: $url" >&2
         exit 64 ;;
     esac
-    if [ "$args" != "$expected" ]; then
-      echo "unexpected curl arguments for $url" >&2
-      exit 65
-    fi
     if [ -n "''${FRESHNESS_CURL_LOG:-}" ]; then
       printf '%s\n' "$url" >> "$FRESHNESS_CURL_LOG"
     fi
@@ -84,9 +135,8 @@ let
     esac
   '';
   reportUnderTest = import ../packages/freshness-report.nix {
-    pkgs = pkgs // {
-      curl = mockCurl;
-    };
+    inherit pkgs;
+    curl = mockCurl;
     versions = testVersions;
   };
 in
@@ -182,6 +232,7 @@ pkgs.runCommand "access-freshness-contract"
     for fixture in malformed-json malformed-stunnel malformed-openssh; do
       result="$TMPDIR/$fixture/report.json"
       mkdir -p "$(dirname "$result")"
+      printf '%s\n' preserved-output > "$result"
       set +e
       FRESHNESS_FIXTURE="$fixture" FRESHNESS_CURL_LOG="$TMPDIR/$fixture/curl.log" \
         ${reportUnderTest}/bin/access-freshness-report --output "$result" \
@@ -190,7 +241,7 @@ pkgs.runCommand "access-freshness-contract"
       set -e
       test "$status" -eq 1
       grep -qF 'malformed release metadata' "$TMPDIR/$fixture/stderr.log"
-      test ! -e "$result"
+      grep -qxF preserved-output "$result"
     done
 
     test "$(wc -l < "$TMPDIR/malformed-json/curl.log")" -eq 1
