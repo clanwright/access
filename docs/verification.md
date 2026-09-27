@@ -73,6 +73,22 @@ fixture. Contract failures identify the violated invariant. The fixture uses Acc
 baseline; it does not establish compatibility with arbitrary consumer pins
 or replace building the consumer's real machine closure.
 
+Domain regression coverage is owned here, including the scenarios handed off
+in [issue #11](https://github.com/clanwright/access/issues/11):
+
+| Scenario                            | Domain check and evidence                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recovery credential handling        | `stunnel-ssh-breakglass-contract`: root-only secret metadata, targeted restart bindings, systemd credential loading, and executed rejection of missing credential directories/files. Staging permissions and runtime paths are checked in generated scripts without creating credentials. |
+| Recovery dependencies and isolation | `stunnel-ssh-breakglass-contract`: host-key, SSH, and TLS service dependencies; service sandbox; recovery account and sudo policy; dedicated PAM configuration; effective SSH policy parsed by the pinned OpenSSH binary.                                                                 |
+| Recovery placement                  | `independent-placement`: recovery units, account, PAM service, and sudo grant exist only with recovery placement. Recovery has no disabled-retained setting; omitting placement is its off configuration. These are evaluated configurations, not executed removal transitions.           |
+| Tailscale lifecycle and firewall    | `tailscale-admin-contract`: enabled and disabled-retained configurations, effective service presence and UDP firewall contribution, the `openFirewall = false` opt-out, and retained state and secret metadata.                                                                           |
+
+Consumers retain checks for their selected settings, secret bindings, exposure
+policy, adapters, and production configuration builds. They need not duplicate
+Access's generated unit or sandbox checks. The local contracts above do not
+establish successful credential staging, host-key creation/reuse, or runtime
+service transitions; those remain part of live consumer acceptance below.
+
 Access does not provision or run project-managed VMs for development, builds,
 or tests, locally or in CI, including NixOS VM, QEMU, or KVM tests. External
 Linux builders and hosted CI infrastructure remain outside Access machine

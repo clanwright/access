@@ -5,6 +5,21 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-27
+
+### Verification
+
+- Cover Tailscale daemon presence and effective UDP firewall contribution in
+  enabled and disabled-retained configurations, including the firewall opt-out
+  and coexistence with a consumer-owned UDP port.
+- Verify that recovery services, account, group, PAM configuration, and sudo
+  grant are absent when the recovery module is not placed.
+- Map domain-owned recovery and Tailscale regression coverage, distinguishing
+  evaluated contracts from live consumer runtime acceptance.
+
+Public APIs, runtime behavior, dependencies, and application packages are
+unchanged. No consumer migration is required.
+
 ## [1.0.1] - 2026-09-12
 
 ### Fixed

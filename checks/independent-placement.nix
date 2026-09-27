@@ -7,6 +7,7 @@
 }:
 let
   placements = [
+    [ ]
     [ "tailscale-admin" ]
     [ "stunnel-ssh-breakglass" ]
     [
@@ -34,6 +35,14 @@ let
         && (units ? stunnel-ssh-breakglass-sshd) == hasEmergency
         && (units ? stunnel-ssh-breakglass-hostkey) == hasEmergency
         && (units ? tailscaled) == hasTailscale;
+      recovery-placement =
+        (machine.users.users ? fixture-recovery) == hasEmergency
+        && (machine.users.groups ? fixture-recovery) == hasEmergency
+        && (machine.security.pam.services ? stunnel-ssh-breakglass-sshd) == hasEmergency
+        &&
+          (builtins.any (
+            rule: builtins.elem "fixture-recovery" (rule.users or [ ])
+          ) machine.security.sudo.extraRules) == hasEmergency;
       transport-independence =
         if hasEmergency then
           lib.hasPrefix "${self.packages.x86_64-linux.openssh}/bin/sshd " units.stunnel-ssh-breakglass-sshd.serviceConfig.ExecStart

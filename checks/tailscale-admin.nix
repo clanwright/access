@@ -33,8 +33,13 @@ let
       inherit machineModules;
     }).machine;
   enabled = scenario { } [ ];
+  closedFirewall = scenario { openFirewall = false; } [ ];
   dnsEnabled = scenario { acceptDns = true; } [ ];
   disabled = scenario { lifecycle = "disabled-retained"; } [ ];
+  consumerUdpPort = 48555;
+  withConsumerPort = scenario { } [
+    { networking.firewall.allowedUDPPorts = [ consumerUdpPort ]; }
+  ];
   interfaceAccepts =
     authKeySecretName:
     (builtins.tryEval (
@@ -78,9 +83,20 @@ let
       && !defaults.acceptDns;
     disabled-retained =
       !disabled.services.tailscale.enable
+      && !(disabled.systemd.services ? tailscaled)
+      && !(builtins.elem 41641 disabled.networking.firewall.allowedUDPPorts)
       && disabled.clan.core.state.tailscale.folders == [ "/var/lib/tailscale" ]
       && disabled.sops.secrets ? tailscale-auth-key;
-    enabled = enabled.services.tailscale.enable;
+    enabled = enabled.services.tailscale.enable && enabled.systemd.services ? tailscaled;
+    firewall =
+      closedFirewall.services.tailscale.enable
+      && closedFirewall.systemd.services ? tailscaled
+      && enabled.services.tailscale.openFirewall
+      && !closedFirewall.services.tailscale.openFirewall
+      && builtins.elem 41641 enabled.networking.firewall.allowedUDPPorts
+      && !(builtins.elem 41641 closedFirewall.networking.firewall.allowedUDPPorts)
+      && builtins.elem consumerUdpPort withConsumerPort.networking.firewall.allowedUDPPorts
+      && builtins.elem 41641 withConsumerPort.networking.firewall.allowedUDPPorts;
     interface-schema = builtins.deepSeq evaluatedService.result.api.schema true;
     manifest =
       evaluatedService.manifest.name == moduleId
