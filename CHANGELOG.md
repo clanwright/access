@@ -5,6 +5,25 @@ the matching version section without rewriting it.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-09-27
+
+### Changed
+
+- Update the authoritative nixpkgs pin and Clan, including Clan-pinned
+  data-mesher, disko, and sops-nix dependencies.
+- Update Tailscale from 1.102.3 to 1.102.4 and refresh the shared application
+  closures. OpenSSH remains 10.5p1 and stunnel remains 5.80; stunnel 5.82 is
+  not yet packaged by the selected nixpkgs revision.
+- Update tooling and freshness-report dependencies, including nixfmt 1.5.0,
+  Renovate 44.104.0,
+  and curl 8.22.0.
+- Update the SHA-pinned Nix installer action from v22 to v23 in all CI and
+  release workflows.
+
+Public module APIs and secret interfaces are unchanged. No consumer migration
+is required; consumers must still build their own machine closures before
+updating deployed systems.
+
 ## [1.0.2] - 2026-09-27
 
 ### Verification
