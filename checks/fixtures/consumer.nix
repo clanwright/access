@@ -8,7 +8,7 @@ let
     map (name: {
       inherit name;
       value = {
-        imports = if builtins.isAttrs machineModules then machineModules.${name} or [ ] else machineModules;
+        imports = machineModules;
         nixpkgs.hostPlatform = "x86_64-linux";
         # Evaluation-only container; all credential references are runtime paths.
         boot.isContainer = true;
@@ -36,7 +36,6 @@ let
       roles.breakglass.machines.access-node.settings = {
         tlsPort = 48111;
         sshPort = 48112;
-        recoveryUser = "fixture-recovery";
       };
     };
   };

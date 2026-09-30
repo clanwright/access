@@ -5,8 +5,7 @@ pin, so each Access release identifies one tested package and library closure.
 The public application outputs are `tailscale`, `stunnel`, and `openssh` for
 `x86_64-linux`. The `stunnel` and `openssh` outputs are also published for
 `aarch64-darwin`, using the same root pin, so operators can install the exact
-stock client binaries ahead of an incident. Access does not add a client
-package, wrapper, profile schema, JSON export, or configuration generator.
+stock client binaries ahead of an incident.
 
 Tailscale uses the NixOS module supplied by the consumer's nixpkgs, with its
 `package` option forced to the matching Access output. The emergency service
@@ -16,10 +15,20 @@ consumer's ordinary OpenSSH service is not enabled or repackaged by Access. Acce
 does not export an overlay, NixOS module stack, package selector, or package
 override option.
 
+The optional Linux `lib.tailscaleReadyGate` command closes over the same Access
+Tailscale output as the daemon. Its `pkgs` argument supplies consumer-native
+jq, iproute2, coreutils and shell; it cannot select another Tailscale package.
+This small glue combines native readiness with exact address/interface checks
+needed by a private listener, without taking over the consumer's unit lifecycle.
+Its [contract](../clanServices/tailscale-admin/README.md#private-binding-startup-gate)
+requires matching daemon/CLI package authority and ordinary consumer identity.
+Runtime qualification is owned by
+[PREDEPLOY acceptance](verification.md#predeploy-acceptance).
+
 This creates an intentional compatibility boundary: a consumer-native NixOS
 module may be older or newer than the Access package. Access verifies its own
-current baseline and an external Clan fixture; each consumer must additionally
-build its real machine closures before deployment. A compatibility failure is
+current baseline through repository-owned, secret-free Clan consumer fixtures.
+Each consumer must additionally build its real machine closures before deployment. A compatibility failure is
 fixed by a new Access release or a reviewed consumer update, never by silently
 selecting a consumer package.
 

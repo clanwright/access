@@ -23,10 +23,27 @@
           "x86_64-linux"
         ];
 
-        imports = [
-          inputs.clan-core.flakeModules.default
-          ./flake-module.nix
-        ];
+        flake.clan.modules = {
+          "@clanwright/tailscale-admin" = import ./clanServices/tailscale-admin/default.nix {
+            inherit self;
+          };
+          "@clanwright/stunnel-ssh-breakglass" = import ./clanServices/stunnel-ssh-breakglass/default.nix {
+            inherit self;
+          };
+        };
+
+        flake.lib.tailscaleReadyGate =
+          {
+            pkgs,
+            ipv4,
+            interface,
+          }:
+          import ./lib/tailscale-ready-gate.nix {
+            inherit pkgs ipv4 interface;
+            tailscale =
+              self.packages.${pkgs.stdenv.hostPlatform.system}.tailscale
+                or (throw "Access Tailscale readiness requires a supported Linux package output");
+          };
 
         perSystem =
           {
@@ -35,26 +52,22 @@
             system,
             ...
           }:
-          let
-            freshnessReport = import ./packages/freshness-report.nix {
-              inherit pkgs;
-              versions = {
-                tailscale = pkgs.tailscale.version;
-                stunnel = pkgs.stunnel.version;
-                openssh = pkgs.openssh.version;
-              };
-            };
-          in
           {
             formatter = pkgs.nixfmt;
             devShells.default = pkgs.mkShell {
               packages = [
                 pkgs.actionlint
+                pkgs.bash
+                pkgs.coreutils
                 pkgs.gitleaks
+                pkgs.git
+                pkgs.jq
                 pkgs.nixfmt
+                pkgs.openssh
                 pkgs.prettier
-                (pkgs.python3.withPackages (packages: [ packages.pyyaml ]))
                 pkgs.renovate
+                pkgs.shellcheck
+                pkgs.zizmor
               ];
             };
             packages = {
@@ -62,7 +75,6 @@
             }
             // lib.optionalAttrs (system == "x86_64-linux") {
               inherit (pkgs) tailscale;
-              freshness-report = freshnessReport;
             };
             checks = {
               recovery-client-config = import ./checks/recovery-client-config.nix {

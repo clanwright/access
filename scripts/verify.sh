@@ -48,15 +48,18 @@ run_stage() {
 }
 
 formatting() {
-  git ls-files -z '*.nix' | xargs -0 nixfmt --check
+  while IFS= read -r -d '' nix_file; do
+    [[ ! -f "$nix_file" ]] || nixfmt --check "$nix_file"
+  done < <(git ls-files -z '*.nix')
   prettier --check "**/*.{md,json,json5,yml,yaml}"
 }
 
 static_checks() {
-  python3 scripts/verify-workflows.py .github/workflows
+  zizmor --offline --no-progress .github/workflows
   git diff --check
   actionlint
-  renovate-config-validator renovate.json5
+  shellcheck scripts/*.sh
+  renovate-config-validator renovate.json
 }
 
 secret_scan() {
@@ -86,7 +89,7 @@ linux_checks() {
   check_names="$(
     nix eval --json --no-write-lock-file --option allow-import-from-derivation false \
       .#checks.x86_64-linux --apply builtins.attrNames \
-      | python3 -c 'import json, sys; print(" ".join(json.load(sys.stdin)))'
+      | jq -r '.[]'
   )"
   check_refs=()
   for check_name in $check_names; do

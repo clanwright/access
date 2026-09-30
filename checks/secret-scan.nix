@@ -2,11 +2,13 @@
 pkgs.runCommand "access-secret-scan-contract"
   {
     nativeBuildInputs = [
+      pkgs.bash
       pkgs.gitleaks
-      pkgs.python3
+      pkgs.openssh
+      pkgs.jq
     ];
   }
   ''
-    python3 ${root}/scripts/test-secret-scan.py
+    bash ${root}/scripts/test-secret-scan.sh
     touch "$out"
   ''

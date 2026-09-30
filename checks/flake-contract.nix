@@ -19,11 +19,12 @@ let
   flakePartsNode = rootInputs.flake-parts or null;
   nixpkgsNode = rootInputs.nixpkgs or null;
   packages = self.packages.${system} or { };
-  packageContract = builtins.all (name: builtins.hasAttr name packages) [
-    "tailscale"
-    "stunnel"
-    "openssh"
-  ];
+  packageContract =
+    builtins.attrNames packages == [
+      "openssh"
+      "stunnel"
+      "tailscale"
+    ];
   inputContract =
     inputs ? clan-core
     && inputs ? flake-parts
@@ -32,7 +33,11 @@ let
     && nixpkgsNode != null
     && lock.nodes.${clanCoreNode}.inputs.nixpkgs == [ "nixpkgs" ]
     && lock.nodes.${flakePartsNode}.inputs.nixpkgs-lib == [ "nixpkgs" ];
-  registryContract = self ? clan && self.clan ? modules;
+  registryContract =
+    builtins.attrNames (self.clan.modules or { }) == [
+      "@clanwright/stunnel-ssh-breakglass"
+      "@clanwright/tailscale-admin"
+    ];
   developmentHostContract =
     self.devShells ? aarch64-darwin
     && self.devShells.aarch64-darwin ? default
@@ -46,6 +51,26 @@ let
   closedConsumerSurface =
     builtins.attrNames (self.overlays or { }) == [ ]
     && builtins.attrNames (self.nixosModules or { }) == [ ];
+  readyGate = self.lib.tailscaleReadyGate {
+    inherit pkgs;
+    ipv4 = "100.64.0.10";
+    interface = "tailscale0";
+  };
+  readyGateContract =
+    builtins.attrNames (self.lib or { }) == [ "tailscaleReadyGate" ]
+    &&
+      builtins.functionArgs self.lib.tailscaleReadyGate == {
+        pkgs = false;
+        ipv4 = false;
+        interface = false;
+      }
+    && !(builtins.tryEval (
+      self.lib.tailscaleReadyGate {
+        pkgs = inputs.nixpkgs.legacyPackages.aarch64-darwin;
+        ipv4 = "100.64.0.10";
+        interface = "tailscale0";
+      }
+    )).success;
 in
 if
   builtins.length nixpkgsNodes == 1
@@ -54,8 +79,11 @@ if
   && registryContract
   && developmentHostContract
   && closedConsumerSurface
+  && readyGateContract
 then
   pkgs.runCommand "access-flake-contract" { } ''
+    test -x ${readyGate}
+    grep -Fq ${pkgs.lib.escapeShellArg "${packages.tailscale}/bin/tailscale"} ${readyGate}
     touch "$out"
   ''
 else

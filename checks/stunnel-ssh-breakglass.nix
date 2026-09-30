@@ -33,12 +33,35 @@ let
     settings:
     (consumerFor { instances = instance "stunnel-ssh-breakglass" "access-node" settings; }).machine;
   config = scenario { };
-  customRecoveryUser = "custom-recovery";
-  customRecoveryConfig = scenario { recoveryUser = customRecoveryUser; };
+  withOrdinarySsh =
+    (consumerFor {
+      instances = instance "stunnel-ssh-breakglass" "access-node" { };
+      machineModules = [
+        {
+          services.openssh = {
+            enable = true;
+            startWhenNeeded = false;
+            ports = [ 2222 ];
+            authorizedKeysFiles = [ "/etc/ssh/ordinary-authorized-keys/%u" ];
+            settings.PasswordAuthentication = true;
+          };
+        }
+      ];
+    }).machine;
+  ordinarySshdUnit = withOrdinarySsh.systemd.services.sshd;
+  coexistingRecoveryUnit = withOrdinarySsh.systemd.services.${sshdServiceName};
+  custom = scenario {
+    tlsPort = 48331;
+    sshPort = 48332;
+    listenAddress = "192.0.2.10";
+    pskSecretName = "custom-psk";
+    authorizedKeysSecretName = "custom-authorized-keys";
+  };
+  customStunnelUnit = custom.systemd.services.${serviceName};
+  customSshdUnit = custom.systemd.services.${sshdServiceName};
   stunnelUnit = config.systemd.services.${serviceName};
   sshdUnit = config.systemd.services.${sshdServiceName};
   hostKeyUnit = config.systemd.services.${hostKeyServiceName};
-  customRecoverySshdUnit = customRecoveryConfig.systemd.services.${sshdServiceName};
   accessStunnel = self.packages.${system}.stunnel;
   accessOpenSSH = self.packages.${system}.openssh;
   pskSecret = config.sops.secrets.${defaults.pskSecretName};
@@ -46,6 +69,7 @@ let
   sshdExecStart = sshdUnit.serviceConfig.ExecStart;
   sshdConfigPrefix = "${accessOpenSSH}/bin/sshd -D -e -f ";
   sshdConfig = lib.removePrefix sshdConfigPrefix sshdExecStart;
+  customSshdConfig = lib.removePrefix sshdConfigPrefix customSshdUnit.serviceConfig.ExecStart;
   nonEmptyCommands =
     value:
     map toString (
@@ -53,7 +77,9 @@ let
     );
   stunnelExecStartPre = nonEmptyCommands stunnelUnit.serviceConfig.ExecStartPre;
   sshdExecStartPre = nonEmptyCommands sshdUnit.serviceConfig.ExecStartPre;
-  stunnelConfigRenderer = builtins.head stunnelExecStartPre;
+  pskValidator = builtins.head stunnelExecStartPre;
+  stunnelConfig = lib.removePrefix "${accessStunnel}/bin/stunnel " stunnelUnit.serviceConfig.ExecStart;
+  customStunnelConfig = lib.removePrefix "${accessStunnel}/bin/stunnel " customStunnelUnit.serviceConfig.ExecStart;
   authorizedKeysRenderer = builtins.head sshdExecStartPre;
   hostKeyGenerator = hostKeyUnit.serviceConfig.ExecStart;
   optionNames = builtins.attrNames (
@@ -62,7 +88,7 @@ let
   rootOnly = secret: secret.owner == "root" && secret.group == "root" && secret.mode == "0400";
   hasRecoverySudoRule = builtins.any (
     rule:
-    rule.users == [ defaults.recoveryUser ]
+    rule.users == [ "access-recovery" ]
     && builtins.any (
       command: command.command == "ALL" && builtins.elem "NOPASSWD" command.options
     ) rule.commands
@@ -98,6 +124,13 @@ let
     forceMachine = false;
     instances = sameMachineInstances;
   };
+  collisionConsumer =
+    machineModule:
+    consumerFor {
+      forceMachine = false;
+      instances = instance "stunnel-ssh-breakglass" "access-node" { };
+      machineModules = [ machineModule ];
+    };
   distinctMachineInstances =
     (instance "breakglass-first" "access-node" { })
     // (instance "breakglass-second" "access-node-2" { });
@@ -124,19 +157,71 @@ let
     assertion-distinct-secrets = assertionRejects (
       defaults // { pskSecretName = defaults.authorizedKeysSecretName; }
     ) "${moduleId} requires distinct PSK and authorized-key secret names.";
-    assertion-non-root-user = assertionRejects (
-      defaults // { recoveryUser = "root"; }
-    ) "${moduleId} recoveryUser must be non-root.";
+    foreign-recovery-account-rejected =
+      builtins.elem
+        "${moduleId} reserves the access-recovery account; consumer user definitions must not collide."
+        (
+          failedAssertionMessages (collisionConsumer {
+            users.users.access-recovery.description = "consumer account";
+          })
+        );
+    foreign-recovery-account-alias-rejected =
+      builtins.elem
+        "${moduleId} reserves the access-recovery account and group names; consumer aliases must not collide."
+        (
+          failedAssertionMessages (collisionConsumer {
+            users.users.z-alias = {
+              isNormalUser = true;
+              name = "access-recovery";
+              group = "users";
+            };
+          })
+        );
+    foreign-recovery-group-alias-rejected =
+      builtins.elem
+        "${moduleId} reserves the access-recovery account and group names; consumer aliases must not collide."
+        (
+          failedAssertionMessages (collisionConsumer {
+            users.groups.z-alias.name = "access-recovery";
+          })
+        );
+    foreign-recovery-group-rejected =
+      builtins.elem
+        "${moduleId} reserves the access-recovery group; consumer group definitions must not collide."
+        (
+          failedAssertionMessages (collisionConsumer {
+            users.groups.access-recovery.gid = 55555;
+          })
+        );
+    foreign-recovery-membership-rejected =
+      builtins.all
+        (
+          user:
+          builtins.elem "${moduleId} reserves access-recovery group membership for the recovery account." (
+            failedAssertionMessages (collisionConsumer {
+              users.users.foreign-user = user;
+            })
+          )
+        )
+        [
+          {
+            isNormalUser = true;
+            group = "access-recovery";
+          }
+          {
+            isNormalUser = true;
+            extraGroups = [ "access-recovery" ];
+          }
+        ];
     authoritative-binaries =
-      stunnelUnit.serviceConfig.ExecStart
-      == "${accessStunnel}/bin/stunnel /run/${serviceName}/stunnel.conf"
+      stunnelUnit.serviceConfig.ExecStart == "${accessStunnel}/bin/stunnel ${stunnelConfig}"
+      && lib.hasPrefix "/nix/store/" stunnelConfig
       && lib.hasPrefix "${accessOpenSSH}/bin/sshd -D -e -f /nix/store/" sshdExecStart
       && builtins.any (lib.hasPrefix "${accessOpenSSH}/bin/sshd -t -f /nix/store/") sshdExecStartPre;
     defaults =
       defaults.tlsPort == 47291
       && defaults.sshPort == 47292
       && defaults.listenAddress == "0.0.0.0"
-      && defaults.recoveryUser == "access-recovery"
       && defaults.pskSecretName == "stunnel-ssh-psk"
       && defaults.authorizedKeysSecretName == "recovery-ssh-authorized-keys";
     firewall-and-service-independence =
@@ -144,6 +229,31 @@ let
       && !config.services.tailscale.enable
       && !(builtins.elem defaults.tlsPort config.networking.firewall.allowedTCPPorts)
       && !(builtins.elem defaults.sshPort config.networking.firewall.allowedTCPPorts);
+    ordinary-ssh-coexistence =
+      withOrdinarySsh.services.openssh.enable
+      && !withOrdinarySsh.services.openssh.startWhenNeeded
+      && withOrdinarySsh.services.openssh.ports == [ 2222 ]
+      && withOrdinarySsh.services.openssh.settings.PasswordAuthentication
+      && builtins.elem "/etc/ssh/ordinary-authorized-keys/%u" withOrdinarySsh.services.openssh.authorizedKeysFiles
+      && !(builtins.elem "/run/stunnel-ssh-breakglass-sshd/authorized_keys" withOrdinarySsh.services.openssh.authorizedKeysFiles)
+      && builtins.all (
+        key: key.path != "/var/lib/stunnel-ssh-breakglass/ssh_host_ed25519_key"
+      ) withOrdinarySsh.services.openssh.hostKeys
+      && ordinarySshdUnit.serviceConfig.ExecStart != coexistingRecoveryUnit.serviceConfig.ExecStart
+      && (ordinarySshdUnit.serviceConfig.Group or "root") != "access-recovery"
+      && coexistingRecoveryUnit.serviceConfig.Group == "access-recovery"
+      && coexistingRecoveryUnit.serviceConfig.ExecStart == sshdUnit.serviceConfig.ExecStart
+      && coexistingRecoveryUnit.serviceConfig.LoadCredential == sshdUnit.serviceConfig.LoadCredential
+      &&
+        withOrdinarySsh.systemd.services.${serviceName}.serviceConfig.ExecStart
+        == stunnelUnit.serviceConfig.ExecStart
+      &&
+        withOrdinarySsh.systemd.services.${hostKeyServiceName}.serviceConfig.ExecStart
+        == hostKeyUnit.serviceConfig.ExecStart
+      && !(builtins.elem "sshd.service" (coexistingRecoveryUnit.after ++ coexistingRecoveryUnit.requires))
+      && !(builtins.elem "${sshdServiceName}.service" (
+        ordinarySshdUnit.after ++ ordinarySshdUnit.requires
+      ));
     host-key-unit =
       hostKeyUnit.before == [ "${sshdServiceName}.service" ]
       && hostKeyUnit.serviceConfig.Type == "oneshot"
@@ -161,14 +271,23 @@ let
           "authorizedKeysSecretName"
           "listenAddress"
           "pskSecretName"
-          "recoveryUser"
           "sshPort"
           "tlsPort"
         ];
     interface-types =
       interfaceRejects { listenAddress = "0.0.0.0\nPSKsecrets = /unsafe"; }
-      && interfaceRejects { recoveryUser = "access-recovery\nAllowUsers root"; }
       && interfaceRejects { pskSecretName = "psk/unsafe"; };
+    unknown-settings-rejected = builtins.all (name: interfaceRejects { ${name} = true; }) [
+      "unknownSetting"
+      "recoveryUser"
+      "authKeyValue"
+      "credential"
+      "hmacSecretValue"
+      "keySecretValue"
+      "password"
+      "secretValue"
+      "token"
+    ];
     manifest =
       evaluatedService.manifest.name == moduleId
       && builtins.attrNames evaluatedService.roles == [ "breakglass" ];
@@ -193,6 +312,20 @@ let
       && rootOnly authorizedKeysSecret
       && pskSecret.restartUnits == [ "${serviceName}.service" ]
       && authorizedKeysSecret.restartUnits == [ "${sshdServiceName}.service" ];
+    custom-secret-wiring =
+      builtins.attrNames custom.sops.secrets == [
+        "custom-authorized-keys"
+        "custom-psk"
+      ]
+      && rootOnly custom.sops.secrets.custom-psk
+      && rootOnly custom.sops.secrets.custom-authorized-keys
+      && custom.sops.secrets.custom-psk.restartUnits == [ "${serviceName}.service" ]
+      && custom.sops.secrets.custom-authorized-keys.restartUnits == [ "${sshdServiceName}.service" ]
+      && customStunnelUnit.serviceConfig.LoadCredential == [ "psk:/run/secrets/custom-psk" ]
+      &&
+        customSshdUnit.serviceConfig.LoadCredential == [
+          "authorized-keys:/run/secrets/custom-authorized-keys"
+        ];
     singleton-distinct-machines-allowed = distinctFirst.evaluated && distinctSecond.evaluated;
     singleton-same-machine-rejected = builtins.elem singletonMessage (
       failedAssertionMessages sameMachineConsumer
@@ -200,10 +333,8 @@ let
     sshd-account-context =
       sshdUnit.serviceConfig.RuntimeDirectory == sshdServiceName
       && sshdUnit.serviceConfig.RuntimeDirectoryMode == "0750"
-      && sshdUnit.serviceConfig.Group == defaults.recoveryUser
-      && !(sshdUnit.serviceConfig ? User)
-      && customRecoverySshdUnit.serviceConfig.Group == customRecoveryUser
-      && !(customRecoverySshdUnit.serviceConfig ? User);
+      && sshdUnit.serviceConfig.Group == "access-recovery"
+      && !(sshdUnit.serviceConfig ? User);
     sshd-lifecycle =
       sshdUnit.wantedBy == [ "multi-user.target" ]
       &&
@@ -241,8 +372,7 @@ let
         ]
       && stunnelUnit.requires == [ "${sshdServiceName}.service" ]
       && stunnelUnit.serviceConfig.Type == "simple"
-      && stunnelUnit.serviceConfig.RuntimeDirectory == serviceName
-      && stunnelUnit.serviceConfig.RuntimeDirectoryMode == "0700"
+      && !(stunnelUnit.serviceConfig ? RuntimeDirectory)
       && stunnelUnit.serviceConfig.DynamicUser
       && stunnelUnit.serviceConfig.Restart == "on-failure"
       && stunnelUnit.serviceConfig.RestartSec == "5s"
@@ -278,7 +408,8 @@ let
 in
 assert contract;
 pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
-  stunnel_renderer=${lib.escapeShellArg stunnelConfigRenderer}
+  psk_validator=${lib.escapeShellArg pskValidator}
+  stunnel_config=${lib.escapeShellArg stunnelConfig}
   authorized_keys_renderer=${lib.escapeShellArg authorizedKeysRenderer}
   host_key_generator=${lib.escapeShellArg hostKeyGenerator}
 
@@ -304,12 +435,12 @@ pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
     fi
   }
 
-  for script in "$stunnel_renderer" "$authorized_keys_renderer" "$host_key_generator"; do
+  for script in "$psk_validator" "$authorized_keys_renderer" "$host_key_generator"; do
     ${pkgs.bash}/bin/bash -n "$script"
   done
 
-  if ${pkgs.coreutils}/bin/env -u CREDENTIALS_DIRECTORY "$stunnel_renderer" >stunnel.stdout 2>stunnel.stderr; then
-    echo "stunnel renderer accepted a missing credential directory" >&2
+  if ${pkgs.coreutils}/bin/env -u CREDENTIALS_DIRECTORY "$psk_validator" >stunnel.stdout 2>stunnel.stderr; then
+    echo "stunnel validator accepted a missing credential directory" >&2
     exit 1
   fi
   require_fragment stunnel-missing-credential stunnel.stderr \
@@ -322,8 +453,8 @@ pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
   require_fragment authorized-keys-missing-credential authorized.stderr \
     'systemd did not provide recovery authorized keys'
 
-  if CREDENTIALS_DIRECTORY="$TMPDIR/missing" "$stunnel_renderer" >stunnel-missing.stdout 2>stunnel-missing.stderr; then
-    echo "stunnel renderer accepted a nonexistent PSK credential" >&2
+  if CREDENTIALS_DIRECTORY="$TMPDIR/missing" "$psk_validator" >stunnel-missing.stdout 2>stunnel-missing.stderr; then
+    echo "stunnel validator accepted a nonexistent PSK credential" >&2
     exit 1
   fi
   require_fragment stunnel-invalid-credential stunnel-missing.stderr 'invalid stunnel PSK record'
@@ -335,21 +466,25 @@ pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
   require_fragment authorized-keys-invalid-credential authorized-missing.stderr \
     'invalid recovery authorized-key file'
 
-  require_fragment stunnel-psk-validation "$stunnel_renderer" '[A-Za-z0-9._-]+:[0-9a-f]{64}'
-  reject_fragment stunnel-policy "$stunnel_renderer" '/run/secrets/'
-  reject_fragment stunnel-policy "$stunnel_renderer" 'cert ='
-  reject_fragment stunnel-policy "$stunnel_renderer" 'TLSv1.2'
-  reject_fragment stunnel-policy "$stunnel_renderer" 'ciphers ='
-  require_fragment stunnel-policy "$stunnel_renderer" 'PSKsecrets = $CREDENTIALS_DIRECTORY/psk'
-  require_fragment stunnel-policy "$stunnel_renderer" 'accept = 0.0.0.0:47291'
-  require_fragment stunnel-policy "$stunnel_renderer" 'connect = 127.0.0.1:47292'
-  require_fragment stunnel-policy "$stunnel_renderer" 'sslVersionMin = TLSv1.3'
-  require_fragment stunnel-policy "$stunnel_renderer" 'sslVersionMax = TLSv1.3'
-  require_fragment stunnel-policy "$stunnel_renderer" 'sessionResume = no'
-  require_fragment stunnel-policy "$stunnel_renderer" 'sessionCacheSize = 100'
-  require_fragment stunnel-policy "$stunnel_renderer" 'TIMEOUTbusy = 30'
-  require_fragment stunnel-policy "$stunnel_renderer" 'TIMEOUTconnect = 10'
-  require_fragment stunnel-policy "$stunnel_renderer" 'TIMEOUTidle = 900'
+  require_fragment stunnel-psk-validation "$psk_validator" '[A-Za-z0-9._-]+:[0-9a-f]{64}'
+  reject_fragment stunnel-policy "$stunnel_config" '/run/secrets/'
+  reject_fragment stunnel-policy "$stunnel_config" 'cert ='
+  reject_fragment stunnel-policy "$stunnel_config" 'TLSv1.2'
+  reject_fragment stunnel-policy "$stunnel_config" 'ciphers ='
+  require_fragment stunnel-policy "$stunnel_config" 'PSKsecrets=/run/credentials/stunnel-ssh-breakglass.service/psk'
+  require_fragment stunnel-policy "$stunnel_config" 'accept=0.0.0.0:47291'
+  require_fragment stunnel-policy "$stunnel_config" 'connect=127.0.0.1:47292'
+  require_fragment stunnel-policy "$stunnel_config" 'sslVersionMin=TLSv1.3'
+  require_fragment stunnel-policy "$stunnel_config" 'sslVersionMax=TLSv1.3'
+  require_fragment stunnel-policy "$stunnel_config" 'sessionResume=no'
+  require_fragment stunnel-policy "$stunnel_config" 'sessionCacheSize=100'
+  require_fragment stunnel-policy "$stunnel_config" 'TIMEOUTbusy=30'
+  require_fragment stunnel-policy "$stunnel_config" 'TIMEOUTconnect=10'
+  require_fragment stunnel-policy "$stunnel_config" 'TIMEOUTidle=900'
+  require_fragment custom-stunnel-policy ${lib.escapeShellArg customStunnelConfig} 'accept=192.0.2.10:48331'
+  require_fragment custom-stunnel-policy ${lib.escapeShellArg customStunnelConfig} 'connect=127.0.0.1:48332'
+  require_fragment custom-stunnel-policy ${lib.escapeShellArg customStunnelConfig} \
+    'PSKsecrets=/run/credentials/stunnel-ssh-breakglass.service/psk'
   require_fragment authorized-keys-package "$authorized_keys_renderer" \
     '${accessOpenSSH}/bin/ssh-keygen -lf "$CREDENTIALS_DIRECTORY/authorized-keys"'
   require_fragment authorized-keys-permissions "$authorized_keys_renderer" \
@@ -361,14 +496,19 @@ pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
 
   ${accessOpenSSH}/bin/sshd -G -T -f ${lib.escapeShellArg sshdConfig} > effective-sshd-config
   require_setting() {
-    if ! ${pkgs.gnugrep}/bin/grep -qxiF "$1" effective-sshd-config; then
+    config_file="''${2:-effective-sshd-config}"
+    if ! ${pkgs.gnugrep}/bin/grep -qxiF "$1" "$config_file"; then
       echo "missing effective sshd setting: $1" >&2
-      ${pkgs.coreutils}/bin/cat effective-sshd-config >&2
+      ${pkgs.coreutils}/bin/cat "$config_file" >&2
       exit 1
     fi
   }
   require_setting 'listenaddress 127.0.0.1:47292'
   require_setting 'port 47292'
+  require_setting 'allowusers access-recovery'
+  require_setting 'usepam yes'
+  require_setting 'strictmodes yes'
+  require_setting 'hostkey /var/lib/stunnel-ssh-breakglass/ssh_host_ed25519_key'
   require_setting 'passwordauthentication no'
   require_setting 'kbdinteractiveauthentication no'
   require_setting 'pubkeyauthentication yes'
@@ -385,5 +525,13 @@ pkgs.runCommand "stunnel-ssh-breakglass-contract" { } ''
   require_setting 'pamservicename stunnel-ssh-breakglass-sshd'
   require_setting 'authorizedkeysfile /run/stunnel-ssh-breakglass-sshd/authorized_keys'
   require_setting 'subsystem sftp ${accessOpenSSH}/libexec/sftp-server'
+  ${accessOpenSSH}/bin/sshd -G -T -f ${lib.escapeShellArg customSshdConfig} > effective-custom-sshd-config
+  require_setting 'listenaddress 127.0.0.1:48332' effective-custom-sshd-config
+  require_setting 'port 48332' effective-custom-sshd-config
+  require_setting 'allowusers access-recovery' effective-custom-sshd-config
+  require_setting 'usepam yes' effective-custom-sshd-config
+  require_setting 'pamservicename stunnel-ssh-breakglass-sshd' effective-custom-sshd-config
+  require_setting 'strictmodes yes' effective-custom-sshd-config
+  require_setting 'hostkey /var/lib/stunnel-ssh-breakglass/ssh_host_ed25519_key' effective-custom-sshd-config
   touch "$out"
 ''
