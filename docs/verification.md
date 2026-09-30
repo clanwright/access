@@ -1,141 +1,130 @@
 # Verification
 
-The complete local gate is secret-free and performs no deploy, provider,
-backup, restore, or consumer lockfile mutation.
+The complete secret-free local gate performs no deployment, provider, backup,
+restore, or consumer lock mutation:
 
 ```bash
 bash scripts/verify.sh
 ```
 
-Local verification, CI, and the release gate use this same entrypoint. It
-checks formatting, static policy and secrets, evaluates all flake outputs,
-executes the Linux checks, and builds the three authoritative Linux packages.
-The secret-free native recovery SSH parser check is exposed on both
-`x86_64-linux` and `aarch64-darwin` and runs on the invoking host with that
-system's pinned OpenSSH package; one host does not execute the other system's
-check.
-On macOS, a configured Linux builder is required to execute the complete gate;
-evaluation alone is not a passing Linux build.
+Local verification, CI, and release gates use this entrypoint. It checks
+formatting, static tooling and a redacted full-tree secret scan, evaluates flake
+outputs, executes Linux checks, and builds the three authoritative Linux
+packages. On macOS, executing Linux builds requires a configured Linux builder;
+evaluation alone is not build evidence.
 
-CI and the release gate also run a separate native `aarch64-darwin` job for
-both recovery packages and their parser check. Linux and Darwin jobs run in
-parallel; the stable `verify` status waits for both and succeeds only when both
-jobs succeed. A failed, skipped, or cancelled platform job cannot produce a
-successful aggregate gate. This preserves the existing required status check.
-The same focused entrypoint
-can be invoked locally without a Linux builder:
+Native recovery verification runs on the invoking host with its pinned stunnel
+and OpenSSH packages:
 
 ```bash
 bash scripts/verify.sh --native-recovery
 ```
 
-This focused mode does not replace the complete Linux gate.
+This mode builds the recovery packages and parses the documented client
+configuration; it does not replace the complete Linux gate. CI also runs a
+native `aarch64-darwin` recovery job. The stable aggregate `verify` status
+requires both platform jobs to succeed.
 
-The entrypoint retains per-stage logs and durations, plus a whole-run summary,
-under `.work/verification/`. Set `ACCESS_VERIFY_LOG_DIR` to select an explicit
-artifact root. Every invocation creates a unique timestamped child directory,
-including failed runs, so an earlier stage log cannot be mistaken for current
-evidence. The CLI contract checks this isolation and the native-only scope.
+Each invocation retains stage logs, durations, and a whole-run summary in a
+unique directory under `.work/verification/`, including failed runs. Set
+`ACCESS_VERIFY_LOG_DIR` to choose an artifact root. Prior logs are never reused
+as current evidence.
 
-The full-tree secret scan explicitly loads `.gitleaks.toml` and retains the
-default detection rules. Its only exception is the complete successful Git SSH
-signature message containing a public Ed25519 fingerprint, which the generic
-API-key rule otherwise mistakes for a credential. It excludes no directories.
-The scanner contract uses the existing public release key to check this exception
-and verifies that adding unrelated text before or after the message is still
-reported. It creates no credential fixtures.
+## Source, build and parser evidence
 
-The flake gate includes service API contracts, exact registry contents,
-single and combined external placement, package precedence, secret metadata,
-repository policy, Renovate policy, release policy, and freshness behavior.
-It also checks that native `stunnel` and `openssh` outputs exist on both
-supported systems and that the strict recovery client SSH template is accepted
-by `ssh -G -F` without contacting a server.
-The check also passes the documented client directives to stunnel, ending with
-an intentionally absent PSK file. It requires a missing-PSK failure before
-listener startup, without creating any credential. This covers directive
-parsing and rejection of a missing credential, not successful TLS initialization
-or an authenticated connection.
-Negative secret-interface checks pass harmless invalid fields through the
-actual interfaces of both services, alongside valid controls. They verify
-rejection, not the wording of the error, and contain no credential values.
+Import-from-derivation is disabled. Generated configurations and scripts are
+inspected during builds, never by reading derivation outputs during evaluation.
+Secret-free Clan fixtures exercise the public modules, placement, assertions,
+rendered units, and NixOS toplevel derivations. They use Access's pinned baseline;
+consumers must build their real configurations with their native NixOS modules.
 
-Import-from-derivation is disabled in the gate: generated configuration and
-script contents are inspected during check builds, never during evaluation.
-This keeps evaluation independent of a developer's populated build cache.
+| Owning check                      | Evidence                                                                                                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flake-contract`                  | Exact two-module registry, public exports and startup-gate arguments, supported application outputs, package authority.                                                                                   |
+| `independent-placement`           | Each service alone and combined, recovery placement limit and absence when omitted.                                                                                                                       |
+| `tailscale-admin-contract`        | Boolean enable/retention, safe secret names, rejected removed settings, enrollment/persistent flags, native firewall/routing policy, package precedence, Caddy startup composition.                       |
+| `stunnel-ssh-breakglass-contract` | Fixed reserved account/group, ports and secret interfaces, secret metadata/restarts, retained state, dependencies and hardening, sudo/PAM policy, generated SSH parsing and missing-credential rejection. |
+| `recovery-client-config`          | Actual `ssh -G -F` parsing on each native platform; actual stunnel parsing ending at an absent PSK before listener startup.                                                                               |
+| `tailscale-ready-gate`            | Isolated fake CLI/ip process fixtures for refusal, stage ordering, deadlines, cancellation and withheld status/address output.                                                                            |
+| `release-contract`                | Stable-tag/changelog glue and refusal of lightweight or unsigned annotated tags through native Git, without a signing credential fixture.                                                                 |
 
-Service scenarios share a complete secret-free Clan consumer fixture and use
-the registered module interface, including settings and placement overrides.
-Positive scenarios force the NixOS toplevel derivation, assertions, and generated
-service units. Negative scenarios check invalid settings and conflicting
-placement, with positive controls to distinguish rejection from a broken
-fixture. Contract failures identify the violated invariant. The fixture uses Access's pinned
-baseline; it does not establish compatibility with arbitrary consumer pins
-or replace building the consumer's real machine closure.
+The `repository-policy`, `verification-contract`, `secret-scan-contract` and
+`renovate-contract` checks cover repository boundaries, gate CLI and evidence
+isolation, redaction/scan exceptions and native Renovate validation.
 
-Domain regression coverage is owned here, including the scenarios handed off
-in [issue #11](https://github.com/clanwright/access/issues/11):
+Negative interface cases use harmless invalid fields and positive controls.
+Trusted signed-tag admission and ancestry refusal are checked separately on
+existing repository tags with the actual release verifier. The hermetic check
+does not create signing keys or claim to exercise that signed path.
+Checks use no secret values, generated access artifacts, credential fixtures,
+remote connections, or project-managed VMs. Runtime limitations and required
+observations are collected in PREDEPLOY acceptance below.
 
-| Scenario                            | Domain check and evidence                                                                                                                                                                                                                                                                 |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Recovery credential handling        | `stunnel-ssh-breakglass-contract`: root-only secret metadata, targeted restart bindings, systemd credential loading, and executed rejection of missing credential directories/files. Staging permissions and runtime paths are checked in generated scripts without creating credentials. |
-| Recovery dependencies and isolation | `stunnel-ssh-breakglass-contract`: host-key, SSH, and TLS service dependencies; service sandbox; recovery account and sudo policy; dedicated PAM configuration; effective SSH policy parsed by the pinned OpenSSH binary.                                                                 |
-| Recovery placement                  | `independent-placement`: recovery units, account, PAM service, and sudo grant exist only with recovery placement. Recovery has no disabled-retained setting; omitting placement is its off configuration. These are evaluated configurations, not executed removal transitions.           |
-| Tailscale lifecycle and firewall    | `tailscale-admin-contract`: enabled and disabled-retained configurations, effective service presence and UDP firewall contribution, the `openFirewall = false` opt-out, and retained state and secret metadata.                                                                           |
+Static tooling uses actionlint, explicit offline zizmor, shellcheck and the
+native Renovate validator. These validate syntax and recognized policies;
+reviewers must also inspect exact workflow jobs, commands, aggregation and
+secret contexts. Renovate proposes dependency updates, so reviewed builds of
+those candidates establish the tested closure.
 
-Consumers retain checks for their selected settings, secret bindings, exposure
-policy, adapters, and production configuration builds. They need not duplicate
-Access's generated unit or sandbox checks. The local contracts above do not
-establish successful credential staging, host-key creation/reuse, or runtime
-service transitions; those remain part of live consumer acceptance below.
+The gate and release scripts are purposeful local glue: the gate retains stage
+logs and timings across native tools, while release verification ties native
+Git trust and ancestry to the stable tag and matching CHANGELOG section.
+Neither takes over hosted publication or consumer operations.
 
-Access does not provision or run project-managed VMs for development, builds,
-or tests, locally or in CI, including NixOS VM, QEMU, or KVM tests. External
-Linux builders and hosted CI infrastructure remain outside Access machine
-ownership. Its accepted verification layers are evaluation, schema and
-assertion checks, generated-configuration parsing, and package builds.
+The full-tree secret scan explicitly loads `.gitleaks.toml`, retains default
+rules, redacts results, and excludes no directories. Its narrow exception is
+the complete successful Git SSH-signature message containing a public Ed25519
+fingerprint. The scanner contract verifies that unrelated surrounding text is
+still reported using the existing public release key, without credential
+fixtures. Run this scan before every commit.
 
-Materialize check derivation metadata first, then run the native check with
-remote builders disabled and evaluate every system without building it. The
-metadata step builds no outputs; it prevents lazy source paths from being
-missing during the read-only `--no-build` evaluation:
+## PREDEPLOY acceptance
+
+Actual runtime evidence remains required under separately authorized consumer
+scope and is not observed by these checks. Missing evidence is neither PASS nor
+a local source-refactoring blocker. Access adds no privileged runner, test host,
+credential fixture or isolation workaround. Access never provisions or runs
+project-managed NixOS VM, QEMU, or KVM workflows; external Linux builders and
+hosted CI remain outside its machine ownership.
+
+| Deferred case                     | Required observation                                                                                                                                                                                                                                                                                                                                        | Owner                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Startup admission                 | Exact Access CLI/daemon under the assembled Caddy vendor unit/drop-in, effective ordinary UID, environment, namespace and sandbox can read the default LocalAPI socket and inspect the selected `UP` interface/IPv4. Wrong state/address/interface and denied socket/netlink access prevent main. Record only exit/layer/timing, never status/address JSON. | Access and consuming unit owner.                   |
+| Native manager                    | Every start/restart runs a fresh pre-start gate; failure prevents main. Preserve retry/start-limit policy. Timeout and stop prevent later stages/main and clean the effective cgroup, including TERM-resistant descendants.                                                                                                                                 | Access and consuming unit owner.                   |
+| Listener, reload, lifetime        | Exact listener and packet policy, public routes/TLS retained after failed reload, explicit reload after address return, and the limits of momentary startup admission. No watcher or automatic-return guarantee.                                                                                                                                            | Network with Apps/VPN consumers.                   |
+| Administrative and recovery trust | Enrollment/state retention, explicit native firewall/routing policy, credential staging, stable host-key creation/reuse, ordinary/recovery SSH isolation, terminal login, PAM/sudo/SFTP; wrong SSH key, missing/wrong PSK, missing/changed pinned host key, direct public SSH and forwarding all refuse.                                                    | Access with consumer and Lifecycle handoff owners. |
+| Resource limits and journals      | Confirm effective configured unit limits, including recovery `MemoryMax`, `TasksMax` and `LimitNOFILE`, and native cgroup accounting/cleanup. Observe useful gate/recovery diagnostics during success, refusal, timeout and authentication failures without credentials or raw Tailscale status/address JSON in journal/stdout/stderr.                      | Access and consuming unit owner.                   |
+
+stunnel's absent-PSK parser result proves directive parsing and missing-credential
+rejection, not a successful TLS connection. Recovery script inspection does not
+prove credential staging or persistent host-key creation/reuse. Evaluated Caddy
+composition does not prove vendor-unit/drop-in assembly or effective socket and
+netlink permissions. TERM-responsive process fixtures do not prove resistant-child
+cleanup: native timeout escalation depends on its monitored process remaining
+alive. Success of the startup predicate is momentary, with a race before bind
+and no guarantee of continued address presence.
+
+Reuse shared evidence when it proves the same property. An ordinary Nix build
+does not run a system manager or prove deployed actor permissions, TUN state,
+network reachability, or live trust. Deferral neither closes live issues nor
+authorizes transport/credential operations, release, consumer input migration,
+or deployment. Source defects still require correction now.
+
+For evaluation without building other systems, materialize check derivation
+metadata first; this builds no outputs and avoids missing lazy source paths:
 
 ```bash
-nix eval --json --no-write-lock-file --builders '' \
+nix eval --json --no-write-lock-file \
   --option allow-import-from-derivation false .#checks \
   --apply 'builtins.mapAttrs (_: checks: builtins.mapAttrs (_: check: check.drvPath) checks)' \
   > /dev/null
-nix flake check --no-write-lock-file --builders '' \
-  --option allow-import-from-derivation false
-nix flake check --no-write-lock-file --all-systems --no-build --builders '' \
+nix flake check --no-write-lock-file --all-systems --no-build \
   --option allow-import-from-derivation false
 ```
 
-These checks do not exercise runtime service startup or restart transitions,
-or prove a successful TLS/SSH handshake, PAM login, sudo session, client-network
-reachability, or the deployed consumer's secret provisioning. Live consumer
-runtime acceptance remains separate owner scope. It must cover positive
-terminal login, sudo, and SFTP plus rejection of a wrong SSH key, wrong or
-missing PSK, and missing or changed pinned host key in Clanwright.
-
-To execute only the Linux checks with a configured Linux builder:
+For Linux checks with a configured builder:
 
 ```bash
 nix build --no-link --impure --option allow-import-from-derivation false --expr \
   'builtins.attrValues ((builtins.getFlake (toString ./.)).checks.x86_64-linux)'
 ```
-
-Generate the non-blocking freshness artifact with:
-
-```bash
-nix run .#freshness-report -- --output access-freshness.json
-```
-
-`current`, `lag`, and `unknown` are valid explicit states. Network lookup
-failure produces `unknown` and exits successfully; a successful response with
-malformed metadata is blocking. The client makes one bounded unauthenticated
-request to each official stable source (Tailscale GitHub Releases, stunnel's
-release list, and OpenBSD's portable OpenSSH archive), ignores user curl
-configuration, and does not modify a
-lockfile or repository file unless the requested output path is inside the
-working tree.

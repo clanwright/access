@@ -28,6 +28,7 @@
       ;
     lib = inputs.nixpkgs.lib;
   };
+  tailscale-ready-gate = import ./tailscale-ready-gate.nix { inherit pkgs; };
   stunnel-ssh-breakglass-contract = import ./stunnel-ssh-breakglass.nix {
     inherit
       inputs
@@ -38,51 +39,12 @@
       ;
     lib = inputs.nixpkgs.lib;
   };
-  external-consumer = import ./external-consumer.nix {
-    inherit
-      inputs
-      pkgs
-      root
-      self
-      ;
-  };
   independent-placement = import ./independent-placement.nix {
     inherit
       inputs
       pkgs
       root
       self
-      ;
-    lib = inputs.nixpkgs.lib;
-  };
-  service-contracts = import ./service-contracts.nix {
-    inherit pkgs self system;
-  };
-  package-authority = import ./package-authority.nix {
-    inherit
-      inputs
-      pkgs
-      root
-      self
-      system
-      ;
-    lib = inputs.nixpkgs.lib;
-  };
-  secret-contract = import ./secret-contract.nix {
-    inherit
-      inputs
-      pkgs
-      root
-      self
-      ;
-    lib = inputs.nixpkgs.lib;
-  };
-  freshness-contract = import ./freshness-contract.nix {
-    inherit
-      pkgs
-      root
-      self
-      system
       ;
     lib = inputs.nixpkgs.lib;
   };

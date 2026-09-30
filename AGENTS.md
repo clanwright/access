@@ -30,8 +30,8 @@ the reusable Clan service recipes that configure them.
   evaluation, schema and assertion checks, generated-configuration parsing,
   and package builds. Live consumer runtime acceptance is separate owner scope.
 - Run a redacted full-tree secret scan before every commit.
-- Hosted workflows are secret-free and may test or report freshness only. They
-  never merge, release, deploy, or modify a consumer lock.
+- Hosted workflows are secret-free and verify source and release trust only.
+  They never merge, release, deploy, or modify a consumer lock.
 - Releases require a protected-main commit, a manually signed tag, a green tag
   gate, and a separately manual GitHub Release.
 

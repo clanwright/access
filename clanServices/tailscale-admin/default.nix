@@ -18,26 +18,10 @@
             default = "tailscale-auth-key";
             description = "Safe SOPS secret name containing the Tailscale authentication key.";
           };
-          lifecycle = lib.mkOption {
-            type = lib.types.enum [
-              "enabled"
-              "disabled-retained"
-            ];
-            default = "enabled";
-            description = "Whether the Tailscale runtime is active; retained state is never deleted.";
-          };
-          useRoutingFeatures = lib.mkOption {
-            type = lib.types.enum [
-              "none"
-              "client"
-              "server"
-              "both"
-            ];
-            default = "none";
-          };
-          openFirewall = lib.mkOption {
+          enable = lib.mkOption {
             type = lib.types.bool;
             default = true;
+            description = "Whether the Tailscale runtime is active; retained state is never deleted.";
           };
           acceptDns = lib.mkOption {
             type = lib.types.bool;
@@ -49,9 +33,6 @@
 
     perInstance =
       { settings, ... }:
-      let
-        enabled = (settings.lifecycle or "enabled") == "enabled";
-      in
       {
         nixosModule =
           {
@@ -76,8 +57,7 @@
             clan.core.state.tailscale.folders = [ "/var/lib/tailscale" ];
 
             services.tailscale = {
-              inherit (settings) openFirewall useRoutingFeatures;
-              enable = enabled;
+              inherit (settings) enable;
               package = lib.mkForce self.packages.${pkgs.stdenv.hostPlatform.system}.tailscale;
               authKeyFile = config.sops.secrets."${settings.authKeySecretName}".path;
               extraUpFlags = extraFlags;

@@ -7,4 +7,6 @@ useDefault = true
 description = "Public SSH fingerprints in complete successful Git signature messages"
 targetRules = ["generic-api-key"]
 regexTarget = "line"
-regexes = ['''^Good "git" signature for [A-Za-z0-9@._+-]+ with ED25519 key SHA256:[A-Za-z0-9+/]{43}$''']
+# Gitleaks 8.30.1 retains the preceding LF in its multi-line finding slice.
+# Accept one separator only; the complete physical message stays anchored.
+regexes = ['''^\n?Good "git" signature for [A-Za-z0-9@._+-]+ with ED25519 key SHA256:[A-Za-z0-9+/]{43}$''']

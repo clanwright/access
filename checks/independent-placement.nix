@@ -27,7 +27,23 @@ let
     in
     {
       inventory =
-        builtins.attrNames config.inventory.instances == lib.sort builtins.lessThan instanceNames;
+        builtins.attrNames config.inventory.instances == lib.sort builtins.lessThan instanceNames
+        && builtins.all (
+          instance:
+          instance.module.input == "access"
+          && builtins.elem instance.module.name [
+            "@clanwright/stunnel-ssh-breakglass"
+            "@clanwright/tailscale-admin"
+          ]
+        ) (builtins.attrValues config.inventory.instances);
+      consumer-settings =
+        !hasTailscale || builtins.elem "--accept-dns=true" machine.services.tailscale.extraSetFlags;
+      breakglass-runtime =
+        !hasEmergency
+        || (
+          builtins.isString units.stunnel-ssh-breakglass.serviceConfig.ExecStart
+          && builtins.isString units.stunnel-ssh-breakglass-sshd.serviceConfig.ExecStart
+        );
       ordinary-sshd-independent = !machine.services.openssh.enable && !(units ? sshd);
       service-placement =
         machine.services.tailscale.enable == hasTailscale
@@ -36,12 +52,12 @@ let
         && (units ? stunnel-ssh-breakglass-hostkey) == hasEmergency
         && (units ? tailscaled) == hasTailscale;
       recovery-placement =
-        (machine.users.users ? fixture-recovery) == hasEmergency
-        && (machine.users.groups ? fixture-recovery) == hasEmergency
+        (machine.users.users ? access-recovery) == hasEmergency
+        && (machine.users.groups ? access-recovery) == hasEmergency
         && (machine.security.pam.services ? stunnel-ssh-breakglass-sshd) == hasEmergency
         &&
           (builtins.any (
-            rule: builtins.elem "fixture-recovery" (rule.users or [ ])
+            rule: builtins.elem "access-recovery" (rule.users or [ ])
           ) machine.security.sudo.extraRules) == hasEmergency;
       transport-independence =
         if hasEmergency then

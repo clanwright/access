@@ -5,10 +5,9 @@ pkgs.runCommand "access-verification-contract"
       pkgs.bash
       pkgs.coreutils
       pkgs.findutils
-      pkgs.python3
     ];
   }
   ''
-    python3 ${root}/scripts/test-verification.py
+    bash ${root}/scripts/test-verification.sh
     touch "$out"
   ''

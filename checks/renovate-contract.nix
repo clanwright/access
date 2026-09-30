@@ -1,34 +1,23 @@
 { pkgs, root }:
 let
-  configPath = root + "/renovate.json5";
+  config = builtins.fromJSON (builtins.readFile (root + "/renovate.json"));
+  group = builtins.head config.packageRules;
+  check = import ./lib/contract.nix { lib = pkgs.lib; };
 in
-if !(builtins.pathExists configPath) then
-  throw "Access inputs are not one weekly group"
-else
-  pkgs.runCommand "access-renovate-contract"
-    {
-      src = root;
-      nativeBuildInputs = [
-        pkgs.gnugrep
-        pkgs.renovate
-      ];
-    }
-    ''
-      set -eu
-
-      fail() {
-        echo "Access inputs are not one weekly group" >&2
-        exit 1
-      }
-
-      renovate-config-validator "$src/renovate.json5" || fail
-      grep -qF 'enabledManagers: ["nix"]' "$src/renovate.json5" || fail
-      grep -qF 'ignoreDeps: ["flake-parts"]' "$src/renovate.json5" || fail
-      grep -qF 'schedule: ["before 6am on monday"]' "$src/renovate.json5" || fail
-      grep -qF 'matchDepNames: ["nixpkgs", "clan-core"]' "$src/renovate.json5" || fail
-      grep -qF 'groupName: "access-closure"' "$src/renovate.json5" || fail
-      test "$(grep -c 'groupName:' "$src/renovate.json5")" -eq 1 || fail
-      test "$(grep -c 'automerge: false' "$src/renovate.json5")" -eq 2 || fail
-
-      touch "$out"
-    ''
+assert check "Access Renovate policy" {
+  nixOnly = config.enabledManagers == [ "nix" ];
+  ignoredFlakeParts = config.ignoreDeps == [ "flake-parts" ];
+  weekly = config.schedule == [ "before 6am on monday" ] && config.timezone == "Europe/Moscow";
+  oneClosureGroup =
+    builtins.length config.packageRules == 1
+    && group.groupName == "access-closure"
+    && group.matchManagers == [ "nix" ]
+    &&
+      group.matchDepNames == [
+        "nixpkgs"
+        "clan-core"
+      ]
+    && group.schedule == config.schedule;
+  manualReview = config.automerge == false && group.automerge == false;
+};
+pkgs.runCommand "access-renovate-contract" { } ''touch "$out"''

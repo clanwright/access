@@ -9,11 +9,10 @@ let
     service = "stunnel-ssh-breakglass";
     sshd = "${service}-sshd";
     hostKey = "${service}-hostkey";
+    recoveryUser = "access-recovery";
   };
   paths = rec {
-    stunnelRun = "/run/${names.service}";
     sshdRun = "/run/${names.sshd}";
-    stunnelConfig = "${stunnelRun}/stunnel.conf";
     authorizedKeys = "${sshdRun}/authorized_keys";
     state = "/var/lib/${names.service}";
     hostKey = "${state}/ssh_host_ed25519_key";
@@ -36,7 +35,7 @@ rec {
     AuthorizedKeysFile ${paths.authorizedKeys}
     AuthorizedKeysCommand none
     AuthorizedPrincipalsFile none
-    AllowUsers ${settings.recoveryUser}
+    AllowUsers ${names.recoveryUser}
     AuthenticationMethods publickey
     PubkeyAuthentication yes
     PasswordAuthentication no
@@ -72,7 +71,30 @@ rec {
     Subsystem sftp ${packages.openssh}/libexec/sftp-server
   '';
 
-  renderStunnelConfig = pkgs.writeShellScript "${names.service}-render-config" ''
+  stunnelConfig = pkgs.writeText "${names.service}-config" (
+    lib.generators.toINIWithGlobalSection { } {
+      globalSection = {
+        foreground = "yes";
+        debug = "notice";
+      };
+      sections.ssh = {
+        client = "no";
+        accept = "${settings.listenAddress}:${toString settings.tlsPort}";
+        connect = "127.0.0.1:${toString settings.sshPort}";
+        PSKsecrets = "/run/credentials/${names.service}.service/psk";
+        sslVersionMin = "TLSv1.3";
+        sslVersionMax = "TLSv1.3";
+        renegotiation = "no";
+        sessionResume = "no";
+        sessionCacheSize = 100;
+        TIMEOUTbusy = 30;
+        TIMEOUTconnect = 10;
+        TIMEOUTidle = 900;
+      };
+    }
+  );
+
+  validatePsk = pkgs.writeShellScript "${names.service}-validate-psk" ''
     set -euo pipefail
     : "''${CREDENTIALS_DIRECTORY:?systemd did not provide the stunnel PSK credential}"
 
@@ -85,29 +107,9 @@ rec {
       echo "invalid stunnel PSK record" >&2
       exit 1
     fi
-
-    umask 077
-    ${pkgs.coreutils}/bin/cat > ${lib.escapeShellArg paths.stunnelConfig} <<EOF
-    foreground = yes
-    debug = notice
-    [ssh]
-    client = no
-    accept = ${settings.listenAddress}:${toString settings.tlsPort}
-    connect = 127.0.0.1:${toString settings.sshPort}
-    PSKsecrets = $CREDENTIALS_DIRECTORY/psk
-    sslVersionMin = TLSv1.3
-    sslVersionMax = TLSv1.3
-    renegotiation = no
-    sessionResume = no
-    sessionCacheSize = 100
-    TIMEOUTbusy = 30
-    TIMEOUTconnect = 10
-    TIMEOUTidle = 900
-    EOF
-    ${pkgs.coreutils}/bin/chmod 0600 ${lib.escapeShellArg paths.stunnelConfig}
   '';
 
-  renderAuthorizedKeys = pkgs.writeShellScript "${names.sshd}-render-authorized-keys" ''
+  stageAuthorizedKeys = pkgs.writeShellScript "${names.sshd}-stage-authorized-keys" ''
     set -euo pipefail
     : "''${CREDENTIALS_DIRECTORY:?systemd did not provide recovery authorized keys}"
 
@@ -116,11 +118,11 @@ rec {
       exit 1
     fi
 
-    ${pkgs.coreutils}/bin/install -d -m 0750 -o root -g ${lib.escapeShellArg settings.recoveryUser} ${lib.escapeShellArg paths.sshdRun}
-    ${pkgs.coreutils}/bin/install -m 0440 -o root -g ${lib.escapeShellArg settings.recoveryUser} "$CREDENTIALS_DIRECTORY/authorized-keys" ${lib.escapeShellArg paths.authorizedKeys}
+    ${pkgs.coreutils}/bin/install -d -m 0750 -o root -g ${lib.escapeShellArg names.recoveryUser} ${lib.escapeShellArg paths.sshdRun}
+    ${pkgs.coreutils}/bin/install -m 0440 -o root -g ${lib.escapeShellArg names.recoveryUser} "$CREDENTIALS_DIRECTORY/authorized-keys" ${lib.escapeShellArg paths.authorizedKeys}
   '';
 
-  generateHostKey = pkgs.writeShellScript "${names.hostKey}-generate" ''
+  ensureHostKey = pkgs.writeShellScript "${names.hostKey}-ensure" ''
     set -euo pipefail
     umask 077
 

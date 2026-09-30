@@ -1,187 +1,47 @@
-# Changelog
+# Release notes
 
-All notable changes to Access are recorded here. GitHub Release notes reproduce
-the matching version section without rewriting it.
+## [1.0.0]
 
-## [Unreleased]
+Access publishes two independently placeable native Clan services and their
+authoritative application packages as one release.
 
-## [1.0.3] - 2026-09-27
+- `@clanwright/tailscale-admin`, role `admin-access`, configures native Tailscale
+  administrative connectivity. Settings are `enable`, `authKeySecretName` and
+  `acceptDns`; disabling runtime retains state and secret declarations. Ordinary
+  OpenSSH, firewall/routing and tailnet authorization remain consumer policy.
+- `@clanwright/stunnel-ssh-breakglass`, role `breakglass`, provides an independent
+  TLS 1.3 PSK-protected channel to an isolated loopback OpenSSH daemon. A strict
+  single-record PSK and SSH key are separate authentication gates. Fixed
+  `access-recovery` has explicit root-equivalent sudo; retained host identity,
+  separate PAM/session policy and strict client host trust keep recovery distinct
+  from ordinary SSH.
+- Linux `lib.tailscaleReadyGate { pkgs; ipv4; interface; }` returns a read-only,
+  finite native startup command for an explicitly selected private IPv4/interface.
+  It uses the Access CLI, native wait/status and kernel address inspection; no
+  cached target, watcher, reload hook or transport-loss service dependency.
+- `x86_64-linux` package outputs are Tailscale 1.102.4, stunnel 5.80 and OpenSSH
+  10.5p1. stunnel/OpenSSH are also available on `aarch64-darwin` for native recovery
+  client preparation and parser checks.
 
-### Changed
+One root nixpkgs owns application closures. Native Clan registration, NixOS
+consumer options and standard INI generation keep the interface small. Purposeful
+glue remains only where upstream mechanisms do not express the required strict
+PSK format, authorized-key staging, retained identity or exact startup predicate.
+Secret interfaces contain names/runtime paths; consumers supply values and own
+machines, placement and operations.
 
-- Update the authoritative nixpkgs pin and Clan, including Clan-pinned
-  data-mesher, disko, and sops-nix dependencies.
-- Update Tailscale from 1.102.3 to 1.102.4 and refresh the shared application
-  closures. OpenSSH remains 10.5p1 and stunnel remains 5.80; stunnel 5.82 is
-  not yet packaged by the selected nixpkgs revision.
-- Update tooling and freshness-report dependencies, including nixfmt 1.5.0,
-  Renovate 44.104.0,
-  and curl 8.22.0.
-- Update the SHA-pinned Nix installer action from v22 to v23 in all CI and
-  release workflows.
+Missing selected private IP refuses the whole consuming cold start/restart.
+Successful startup is a momentary observation with a bind race and no continuous
+availability promise. Native service policy owns restart limits and cgroup
+cleanup; timeout's kill-after escalation is conditional. Network/consumers own
+explicit listeners, packet guards and atomic reload behavior.
 
-Public module APIs and secret interfaces are unchanged. No consumer migration
-is required; consumers must still build their own machine closures before
-updating deployed systems.
+Verification uses native source/schema/assertion checks, generated-config parsing,
+package builds, actionlint/offline zizmor/native Git and redacted scans. Actual
+ordinary UID/socket/netlink/sandbox/manager/cgroup/resource/journal behavior,
+recovery trust/state/login and TLS/auth remain mandatory PREDEPLOY, not observed
+by these gates. No runtime test runner or VM is required or supplied.
 
-## [1.0.2] - 2026-09-27
-
-### Verification
-
-- Cover Tailscale daemon presence and effective UDP firewall contribution in
-  enabled and disabled-retained configurations, including the firewall opt-out
-  and coexistence with a consumer-owned UDP port.
-- Verify that recovery services, account, group, PAM configuration, and sudo
-  grant are absent when the recovery module is not placed.
-- Map domain-owned recovery and Tailscale regression coverage, distinguishing
-  evaluated contracts from live consumer runtime acceptance.
-
-Public APIs, runtime behavior, dependencies, and application packages are
-unchanged. No consumer migration is required.
-
-## [1.0.1] - 2026-09-12
-
-### Fixed
-
-- Register the emergency host identity directory as retained Clan state and
-  reject multiple break-glass instances on the same machine without changing
-  existing service names, paths, or public settings.
-- Isolate verification logs in a unique directory for every run, including
-  when an explicit artifact root is supplied.
-- Keep public SSH signature fingerprints from producing false secret-scan
-  failures, with a whole-line exception and negative scope checks.
-
-### Changed
-
-- Evaluate service scenarios through the registered Clan modules and a shared
-  consumer fixture, with named contract failures and generated-configuration
-  checks instead of duplicated internal module assembly.
-- Separate freshness transport, release parsing, and state classification;
-  preserve its CLI, report schema, network-error behavior, and atomic output,
-  and ignore ambient curl configuration for its bounded unauthenticated requests.
-
-### Verification
-
-- Verify release tags against the repository's trusted public SSH signer
-  policy while retaining manual signing and GitHub Release publication.
-- Run native ARM macOS recovery package and parser checks in CI and the release
-  gate, alongside the complete Linux gate, with both required by the existing
-  aggregate `verify` status.
-- Validate required workflow structure and permissions as YAML, and expose
-  `scripts/verify.sh --native-recovery` for the focused native gate.
-
-## [1.0.0] - 2026-09-06
-
-### Changed
-
-- Declare the existing v0.3.3 implementation as the stable v1.0.0 API, without
-  changing runtime behavior, public interfaces, dependencies, or package
-  versions.
-
-## [0.3.3] - 2026-09-06
-
-### Changed
-
-- Simplify shared freshness request and version handling, flake outputs, and
-  Tailscale flag definitions without changing public APIs, runtime defaults,
-  or application packages.
-
-### Verification
-
-- Replace duplicate static freshness fixtures with schema and behavior checks
-  against actual report output, including ahead and prerelease cases.
-- Remove a redundant Tailscale package-precedence check while retaining the
-  dedicated package-authority contract.
-
-## [0.3.2] - 2026-09-06
-
-### Added
-
-- Publish the pinned stock stunnel and OpenSSH packages on `aarch64-darwin` for
-  installation before an incident.
-- Check a secret-free strict recovery SSH client configuration with the pinned
-  OpenSSH parser on both supported systems, and reject a missing stunnel PSK
-  without opening a listener.
-
-### Documentation
-
-- Document the minimal native recovery path: an ordinary foreground stunnel
-  loopback listener plus explicit `ssh -F` and `sftp -F` sessions, with the
-  existing server host public key transferred over a trusted management path.
-- Clarify that Access provides no custom recovery client, wrapper, profile,
-  JSON export, or configuration command and that live Clanwright acceptance
-  remains consumer-owned.
-
-## [0.3.1] - 2026-09-06
-
-### Fixed
-
-- Make the break-glass sshd runtime directory group-readable by the configured
-  recovery user while retaining the daemon's root UID, so OpenSSH can read the
-  staged authorized-key file after switching accounts.
-
-## [0.3.0] - 2026-09-05
-
-### Breaking
-
-- Restrict `authKeySecretName` on module `@clanwright/tailscale-admin`, role
-  `admin-access`, to `[A-Za-z0-9][A-Za-z0-9._-]*`: the first character must be
-  an ASCII letter or digit, and every remaining character must be an ASCII
-  letter, digit, dot, underscore, or hyphen. Rename any incompatible consumer
-  secret identifier before updating; see the
-  [migration notes](https://github.com/clanwright/access/blob/v0.3.0/docs/migration-v0.3.0.md).
-
-### Changed
-
-- Separate the breakglass interface, NixOS runtime, and configuration rendering
-  without changing the public module IDs or runtime defaults.
-- Share the complete local, CI, and release verification entrypoint.
-
-### Verification fixes
-
-- Decouple freshness behavior fixtures from pinned application versions.
-- Exercise invalid secret settings through the actual service interfaces and
-  force complete consumer assertions and generated systemd units.
-- Validate immutable GitHub Action references and stable release tags against
-  the matching changelog section, without fixing tests to an example release.
-
-## [0.2.0] - 2026-09-05
-
-### Breaking
-
-- Replace `@clanwright/fail2ban-ssh` and `@clanwright/fwknop-ssh-breakglass`
-  with `@clanwright/stunnel-ssh-breakglass`, role `breakglass`: TLS 1.3 PSK
-  protects a separate loopback-only, public-key-authenticated OpenSSH daemon.
-- Remove `fail2ban` and `fwknop` package exports; publish authoritative `stunnel`
-  and `openssh` closures alongside `tailscale`.
-- Default Tailscale routing features to `none` and explicitly disable Tailscale
-  SSH in favor of consumer-owned ordinary OpenSSH.
-
-### Security and fixes
-
-- Isolate emergency host keys, authorized keys, account and service lifecycle
-  from ordinary sshd and Tailscale. Recovery has explicit root-equivalent sudo;
-  password/root login and SSH forwarding are disabled.
-- Apply both true and false DNS preferences to existing Tailscale state.
-- Stop creating a dependency-only ordinary sshd unit from the Tailscale role.
-- Update service/package/secret contracts and freshness sources for the new stack.
-
-See [migration notes](docs/migration-v0.2.0.md). This release does not deploy,
-rotate secrets, create a recovery repository, or update consumer locks.
-
-## [0.1.0] - 2026-09-04
-
-### Added
-
-- `@clanwright/tailscale-admin`, with independently configurable placement,
-  retained state ownership, disabled-retained lifecycle, and an
-  Access-authoritative Tailscale closure.
-- `@clanwright/fail2ban-ssh`, with SSH jail defaults, ignored-network and
-  bootstrap-marker controls, and an Access-authoritative Fail2ban closure.
-- `@clanwright/fwknop-ssh-breakglass`, with hardened high-port SSH, SPA runtime
-  configuration, iptables enforcement, root-only runtime secret paths, and an
-  Access-authoritative fwknop closure.
-- External-consumer, independent-placement, package-authority, secret-boundary,
-  freshness, release, and repository policy checks.
-- Weekly non-automerge dependency grouping, machine-readable freshness
-  metadata, secret-free CI, and a non-publishing release gate.
+The README and adjacent service guides are the current usage/API references;
+`docs/verification.md` owns the canonical PREDEPLOY boundary and `docs/releases.md`
+owns protected-main, SSH-signed tag and manual publication policy.
